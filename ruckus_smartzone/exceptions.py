@@ -97,3 +97,94 @@ class SmartZoneConnectionError(SmartZoneAPIError):
         """
         super().__init__(message)
         self.original_error = original_error
+
+
+class SmartZoneRateLimitError(SmartZoneAPIError):
+    """Raised when the controller rate-limits the caller (429).
+
+    The client backs off and retries while attempts remain; this surfaces only
+    once retries are exhausted.
+    """
+
+    def __init__(
+        self,
+        message: str = "Rate limit exceeded",
+        response_data: Optional[Dict] = None,
+        retry_after: Optional[int] = None,
+    ) -> None:
+        """Initialize rate-limit error.
+
+        Args:
+            message: Error message
+            response_data: Response data if available
+            retry_after: Seconds the controller asked the caller to wait, from
+                the ``RateLimit-Reset`` header, if present
+        """
+        super().__init__(message, status_code=429, response_data=response_data)
+        self.retry_after = retry_after
+
+
+class SmartZoneBusyError(SmartZoneAPIError):
+    """Raised when the controller is busy serialising a configuration change.
+
+    The client backs off and retries while attempts remain; this surfaces only
+    once retries are exhausted.
+    """
+
+    def __init__(
+        self,
+        message: str = "Controller busy",
+        status_code: Optional[int] = None,
+        response_data: Optional[Dict] = None,
+    ) -> None:
+        """Initialize busy error."""
+        super().__init__(message, status_code=status_code, response_data=response_data)
+
+
+# SmartZone returns a 403 with this vendor error code for objects the caller is
+# entitled to but that do not exist; it is treated as "not found".
+NOT_FOUND_ERROR_CODE = 211
+
+
+def _error_code(response_data: Optional[Dict]) -> Optional[int]:
+    """Return the vendor ``errorCode`` from a response body, if present."""
+    if not isinstance(response_data, dict):
+        return None
+    code = response_data.get("errorCode")
+    if isinstance(code, bool):
+        return None
+    if isinstance(code, int):
+        return code
+    if isinstance(code, str) and code.isdigit():
+        return int(code)
+    return None
+
+
+def raise_for_response(status_code: int, response_data: Optional[Dict] = None) -> None:
+    """Raise the exception mapped to an error response.
+
+    Maps HTTP status (and the vendor ``errorCode`` where it changes meaning) to
+    the matching :class:`SmartZoneAPIError` subclass. A 403 carrying
+    ``errorCode`` 211 is raised as :class:`SmartZoneNotFoundError`.
+
+    Args:
+        status_code: HTTP status code of the response
+        response_data: Parsed response body, if any
+    """
+    if status_code == 401:
+        raise SmartZoneAuthenticationError(response_data=response_data)
+    if status_code == 403:
+        if _error_code(response_data) == NOT_FOUND_ERROR_CODE:
+            raise SmartZoneNotFoundError(response_data=response_data)
+        raise SmartZonePermissionError(response_data=response_data)
+    if status_code == 404:
+        raise SmartZoneNotFoundError(response_data=response_data)
+    if status_code == 422:
+        raise SmartZoneValidationError(response_data=response_data)
+    if status_code == 429:
+        raise SmartZoneRateLimitError(response_data=response_data)
+    raise SmartZoneAPIError(
+        f"SmartZone API request failed with status {status_code}",
+        status_code=status_code,
+        response_data=response_data,
+    )

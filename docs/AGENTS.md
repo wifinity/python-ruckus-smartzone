@@ -6,9 +6,10 @@ Python client library for the Ruckus SmartZone (vSZ) public REST API. Targets
 API version `v13_1`. The client surface covers zones, WLANs, WLAN groups and
 their members, and access points.
 
-This repo is an early scaffold: build tooling, the spec-driven pipeline, the test
-harness and the exception/logging foundation are in place; the HTTP client,
-authentication and resource wrappers are not yet implemented.
+Build tooling, the spec-driven pipeline, the test harness, the exception/logging
+foundation, and the HTTP client with its service-ticket session lifecycle and
+transport resilience are in place. Zone/WLAN/AP resource wrappers are not yet
+implemented.
 
 ## Spec-driven models
 
@@ -33,8 +34,12 @@ client. `spec/raw/` is empty until a spec is fetched from a controller.
 | Path | Purpose |
 |------|---------|
 | `ruckus_smartzone/__init__.py` | Package version and public exports |
-| `ruckus_smartzone/exceptions.py` | `SmartZoneAPIError` hierarchy |
-| `ruckus_smartzone/logging_config.py` | Log level control and sensitive-header masking |
+| `ruckus_smartzone/client.py` | `SmartZoneClient`: transport, session lifecycle, retries, pagination |
+| `ruckus_smartzone/auth.py` | `ServiceTicketManager`: acquire, reuse, refresh, release the ticket |
+| `ruckus_smartzone/ticket_cache.py` | `TicketCache` seam + `InMemoryTicketCache` |
+| `ruckus_smartzone/const.py` | Pinned API version and transport constants |
+| `ruckus_smartzone/exceptions.py` | `SmartZoneAPIError` hierarchy and status/error-code mapping |
+| `ruckus_smartzone/logging_config.py` | Log level control; header and URL-query masking |
 | `ruckus_smartzone/generated/models/` | Generated schema index (committed artifact) |
 
 Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
@@ -42,10 +47,12 @@ Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
 ## Conventions
 
 - **Distribution** `ruckus-smartzone`; **import** `ruckus_smartzone`.
-- **Entry point (planned):** `from ruckus_smartzone import SmartZoneClient`.
+- **Entry point:** `from ruckus_smartzone import SmartZoneClient`, used as a context
+  manager so the ticket is released on exit.
 - **Public API is dict-first**; the generated schema index is an internal artifact.
 - **Errors** derive from `SmartZoneAPIError`, carrying `status_code` and `response_data`.
-- **HTTP transport** is `httpx`-based.
+- **HTTP transport** is synchronous `httpx`-based. The service ticket rides as a URL
+  query parameter and is masked wherever a URL is logged.
 
 ## Testing
 

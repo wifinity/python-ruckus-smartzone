@@ -12,17 +12,27 @@ public API is dict-first.
 
 ## 2) Current state
 
-Early scaffold. In place:
+In place:
 
 - Package skeleton (`ruckus_smartzone/`) with version and public exports.
-- Exception hierarchy (`SmartZoneAPIError` and subclasses).
-- Logging configuration (log-level control, sensitive-header masking).
+- Exception hierarchy (`SmartZoneAPIError` and subclasses, plus
+  `SmartZoneRateLimitError`/`SmartZoneBusyError`) with `raise_for_response()`
+  mapping HTTP status and vendor `errorCode` 211 (403 → not found).
+- Logging configuration: log-level control, sensitive-header masking, and
+  `mask_url()` redacting the `serviceTicket` query parameter.
+- `SmartZoneClient` (`client.py`): synchronous `httpx` transport, low-level verbs,
+  `paginate()`, 429 and controller-busy backoff, and context-manager lifecycle.
+- Service-ticket auth (`auth.py` + `ticket_cache.py`): acquire, reuse, refresh on
+  401, release on close, behind the pluggable `TicketCache` seam
+  (`InMemoryTicketCache` only).
 - Spec-driven pipeline (`tools/`, `spec/`, `ruckus_smartzone/generated/`).
 - Build/test tooling: `pyproject.toml`, `Makefile`, `.flake8`, CI workflow.
 - Test harness: `pytest` + `respx` for HTTP isolation.
 
-Not yet implemented: the HTTP client, authentication/session lifecycle,
-transport resilience, and the zone/WLAN/AP resource wrappers.
+Not yet implemented: the zone/WLAN/AP resource wrappers. See ADR 0002 for the
+auth/session/transport design and its live verification (logon, multi-page AP
+pagination, URL masking, and release-on-close all confirmed; the controller-busy
+signal remains an assumption keyed on HTTP 423/503).
 
 ## 3) Spec-driven pipeline
 
@@ -71,6 +81,13 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
 - All errors derive from `SmartZoneAPIError` with `status_code` and
   `response_data` attributes.
 - The pinned API version lives as a single constant in the transport layer.
+- **Keep `README.md` current.** Any change to public functionality (new client
+  methods, constructor arguments, exceptions, or behaviour) updates the
+  `README.md` usage sections in the same change.
+- **This is a public repository.** Docs must not name internal hosts, IP
+  addresses, credentials, other repositories, ticket systems, or any
+  organisation-specific infrastructure. Use placeholders (e.g.
+  `controller.example`) in examples and verification notes.
 
 ## 6) Testing
 

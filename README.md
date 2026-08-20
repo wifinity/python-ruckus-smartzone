@@ -1,11 +1,24 @@
 # Ruckus SmartZone Python Client
 
-A Python client library for the Ruckus SmartZone (vSZ) public REST API,
-targeting API version `v13_1`.
+A Python client library for the Ruckus SmartZone (vSZ) public REST API, targeting
+API version `v13_1`.
 
-> **Status:** early scaffold. Build tooling, the spec-driven pipeline, the test
-> harness and the exception/logging foundation are in place; the HTTP client,
-> authentication and resource wrappers are not yet implemented.
+## Features
+
+- **Service-ticket authentication**: acquires one ticket, reuses it for its
+  lifetime, refreshes it on a 401, and releases it on close
+- **Pluggable ticket cache**: an in-memory store by default, behind a seam that a
+  shared/Redis-backed store can slot into
+- **Credential masking**: the ticket travels as a URL query parameter and is
+  masked wherever a request URL is logged
+- **Transport resilience**: reactive 429 backoff (via `RateLimit-Reset`) and retry
+  on a busy/config-lock controller response
+- **Pagination helper**: walks `index`/`listSize` list endpoints and concatenates
+  the results
+- **Typed exceptions**: a `SmartZoneAPIError` hierarchy mapped from HTTP status and
+  vendor error codes
+- **Dict-first API**: methods return the controller's JSON payloads as dicts
+- **Python 3.10+**: synchronous, built on `httpx`
 
 ## Installation
 
@@ -17,18 +30,167 @@ cd python-ruckus-smartzone
 pip install -e ".[dev]"
 ```
 
-## Development
+## Quick Start
 
-```bash
-make venv     # create .venv and install dependencies (uv)
-make tests    # lint, type-check and unit tests
-make format   # apply black formatting
+```python
+from ruckus_smartzone import SmartZoneClient
+
+# Pass the controller root; the /wsg/api/public/v13_1 path is appended for you.
+with SmartZoneClient(
+    "https://controller.example:8443",
+    username="admin",
+    password="secret",
+    verify=False,  # self-signed controller
+) as client:
+    print(client.controller_version)
+
+    # Page through every access point (handles index/listSize paging).
+    aps = client.paginate("aps", page_size=1000)
+    print(f"Found {len(aps)} access points")
+
+    # Any endpoint via the low-level verbs.
+    zone = client.get("rkszones/{zoneId}/wlans", params={"zoneId": "..."})
+# The service ticket is released (DELETE /serviceTicket) on exit.
 ```
+
+## Usage
+
+### Client initialization
+
+```python
+from ruckus_smartzone import SmartZoneClient
+
+client = SmartZoneClient(
+    "https://controller.example:8443",  # controller root
+    username="admin",
+    password="secret",
+    verify=True,        # TLS verification; False for a self-signed controller
+    timeout=30.0,       # per-request timeout in seconds
+    max_retries=3,      # shared budget for rate-limit and busy backoff
+    log_level="DEBUG",  # optional; configures the ruckus_smartzone logger
+)
+```
+
+### Context manager
+
+Use the client as a context manager so the service ticket is logged off on exit.
+Otherwise, call `close()` yourself (a `finally` block is the safe place):
+
+```python
+with SmartZoneClient("https://controller.example:8443", "admin", "secret") as client:
+    aps = client.paginate("aps")
+    # Ticket released automatically here.
+```
+
+### Service ticket lifecycle
+
+The ticket is acquired lazily on the first request and reused for its lifetime; a
+401 triggers a single refresh-and-retry. `GET /sessionManagement` reports
+interactive admin (GUI) logins — an API service-ticket session is not listed
+there, so to check whether a ticket is still valid, make a request with it and
+observe the status.
+
+To supply a different ticket store (for example a shared cache across processes),
+pass any `TicketCache` implementation:
+
+```python
+from ruckus_smartzone import SmartZoneClient, TicketCache
+
+
+class MyCache(TicketCache):
+    def get(self): ...
+    def set(self, ticket): ...
+    def clear(self): ...
+
+
+client = SmartZoneClient(
+    "https://controller.example:8443", "admin", "secret", ticket_cache=MyCache()
+)
+```
+
+### Low-level API access
+
+The client exposes the HTTP verbs directly. Paths are relative to the versioned
+public API root; parameters go in `params`, request bodies in `json`. Each returns
+the parsed JSON body as a dict.
+
+```python
+result = client.get("aps", params={"zoneId": "..."})
+created = client.post("rkszones/{zoneId}/wlans", json={"name": "..."})
+updated = client.patch("rkszones/{zoneId}/wlangroups/{id}", json={"name": "..."})
+client.delete("rkszones/{zoneId}/wlans/{id}")
+```
+
+For paged list endpoints, `paginate()` fetches every page and returns the combined
+`list` entries:
+
+```python
+# page_size defaults to 100 and is clamped to the API maximum of 1000
+aps = client.paginate("aps", page_size=1000)
+```
+
+### Error handling
+
+```python
+from ruckus_smartzone import (
+    SmartZoneClient,
+    SmartZoneAuthenticationError,
+    SmartZoneNotFoundError,
+    SmartZonePermissionError,
+    SmartZoneValidationError,
+    SmartZoneRateLimitError,
+    SmartZoneBusyError,
+    SmartZoneConnectionError,
+    SmartZoneAPIError,
+)
+
+try:
+    zone = client.get("rkszones/{zoneId}", params={"zoneId": "..."})
+except SmartZoneNotFoundError:
+    print("Not found (includes a 403 with vendor errorCode 211)")
+except SmartZoneAuthenticationError:
+    print("Logon failed — check the username and password")
+except SmartZonePermissionError:
+    print("Permission denied")
+except SmartZoneValidationError:
+    print("Business-rule violation (422)")
+except SmartZoneRateLimitError as e:
+    print(f"Rate limited; retry after {e.retry_after}s")
+except SmartZoneBusyError:
+    print("Controller busy serialising a configuration change")
+except SmartZoneConnectionError:
+    print("Could not reach the controller")
+except SmartZoneAPIError as e:
+    print(f"API error: {e.status_code} - {e.message}")
+```
+
+### Rate limiting and busy retry
+
+The client retries within `max_retries` on two transient conditions:
+
+- **429**: it waits the number of seconds in the `RateLimit-Reset` header, then
+  retries; once the budget is exhausted it raises `SmartZoneRateLimitError`.
+- **Controller busy** (SmartZone serialises configuration writes): it retries with
+  exponential backoff, then raises `SmartZoneBusyError`.
+
+### Logging
+
+Set the log level when constructing the client, or with the module-level function:
+
+```python
+from ruckus_smartzone import set_log_level
+
+set_log_level("DEBUG")
+```
+
+At `DEBUG` the client logs each request line with the status code. Because the
+service ticket rides in the URL, it is masked as `serviceTicket=***`, and the
+`httpx`/`httpcore` loggers are silenced so the raw URL is not emitted.
 
 ## Spec-driven models
 
-Model metadata is generated from the controller's Swagger 2.0 document rather
-than hand-written:
+Model metadata is generated from the controller's Swagger 2.0 document rather than
+hand-written:
 
 ```bash
 make spec-fetch-controller SMARTZONE_BASE_URL=https://<controller>:8443
@@ -38,6 +200,14 @@ make spec-validate
 
 The controller address is never committed — the fetch step replaces the spec's
 `host` with a placeholder. See [spec/README.md](spec/README.md).
+
+## Development
+
+```bash
+make venv     # create .venv and install dependencies (uv)
+make tests    # lint, type-check and unit tests
+make format   # apply black formatting
+```
 
 ## Scope
 

@@ -3,6 +3,7 @@
 import json
 import logging
 from typing import Any, Dict, Union
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 try:
     import httpx
@@ -11,6 +12,14 @@ except ImportError:
 
 # Sensitive header names that should be masked in logs
 SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key"}
+
+# Sensitive URL query parameter names (lower-cased) that should be masked in
+# logs. The SmartZone service ticket travels as a query parameter, so a raw URL
+# would otherwise leak the credential.
+SENSITIVE_QUERY_PARAMS = {"serviceticket"}
+
+# Placeholder substituted for a masked value
+MASK = "***"
 
 # Maximum length for response body in logs (truncate if longer)
 MAX_LOG_BODY_LENGTH = 1000
@@ -105,6 +114,30 @@ def mask_sensitive_headers(headers: Union[Dict[str, str], Any]) -> Dict[str, str
             masked[key] = value
 
     return masked
+
+
+def mask_url(url: Any) -> str:
+    """Redact sensitive query parameters in a URL for logging.
+
+    Any query parameter whose name is in ``SENSITIVE_QUERY_PARAMS`` (matched
+    case-insensitively) has its value replaced with the mask placeholder; every
+    other component of the URL is preserved.
+
+    Args:
+        url: URL as a string or ``httpx.URL``
+
+    Returns:
+        The URL with sensitive query values masked
+    """
+    parts = urlsplit(str(url))
+    if not parts.query:
+        return str(url)
+
+    masked_pairs = [
+        (key, MASK if key.lower() in SENSITIVE_QUERY_PARAMS else value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+    ]
+    return urlunsplit(parts._replace(query=urlencode(masked_pairs)))
 
 
 def format_request_body(body: Any) -> str:
