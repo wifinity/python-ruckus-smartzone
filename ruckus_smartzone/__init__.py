@@ -14,10 +14,18 @@ from ruckus_smartzone.exceptions import (
     SmartZoneValidationError,
 )
 from ruckus_smartzone.logging_config import set_log_level
+from ruckus_smartzone.resources import (
+    WLANGroupsResource,
+    WLANsResource,
+    ZonesResource,
+)
 from ruckus_smartzone.ticket_cache import InMemoryTicketCache, TicketCache
 
 __all__ = [
     "SmartZoneClient",
+    "ZonesResource",
+    "WLANsResource",
+    "WLANGroupsResource",
     "SmartZoneAPIError",
     "SmartZoneAuthenticationError",
     "SmartZonePermissionError",

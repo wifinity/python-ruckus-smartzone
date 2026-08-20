@@ -6,6 +6,7 @@
 - [README.md](../README.md) — install and usage
 - [adr/0001-api-version-and-spec-availability.md](adr/0001-api-version-and-spec-availability.md) — API version + spec-availability decision
 - [adr/0002-auth-session-and-transport.md](adr/0002-auth-session-and-transport.md) — service-ticket lifecycle, credential masking, transport resilience
+- [adr/0003-resource-wrappers-zones-wlans-wlangroups.md](adr/0003-resource-wrappers-zones-wlans-wlangroups.md) — zone/WLAN/WLAN-group resource layer; rename-preserves-membership proof
 
 ## Repository root
 

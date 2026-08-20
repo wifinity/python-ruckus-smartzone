@@ -73,9 +73,9 @@ exact form is confirmed by live verification below.
   manager.
 - The pinned API version `v13_1` lives as a single constant (`const.API_VERSION`);
   the base URL is normalised to the versioned public API root.
-- Resource slices (4.0.4 zones/WLANs, 4.0.5 APs) build on the low-level verbs and
-  `paginate()`; the ticket lifecycle and resilience are not reimplemented per
-  resource.
+- The resource wrappers (zones, WLANs, WLAN groups, access points) build on the
+  low-level verbs and `paginate()`; the ticket lifecycle and resilience are not
+  reimplemented per resource.
 
 ## Live verification
 

@@ -28,8 +28,12 @@ In place:
 - Spec-driven pipeline (`tools/`, `spec/`, `ruckus_smartzone/generated/`).
 - Build/test tooling: `pyproject.toml`, `Makefile`, `.flake8`, CI workflow.
 - Test harness: `pytest` + `respx` for HTTP isolation.
+- Resource wrappers for zones, WLANs, and WLAN groups with their members
+  (`ruckus_smartzone/resources/`, reached as `client.zones`, `client.wlans`,
+  `client.wlan_groups`), plus client-side WLAN-group name validation
+  (`validation.py`). See ADR 0003 for the design and live verification.
 
-Not yet implemented: the zone/WLAN/AP resource wrappers. See ADR 0002 for the
+Not yet implemented: the access-point resource wrappers. See ADR 0002 for the
 auth/session/transport design and its live verification (logon, multi-page AP
 pagination, URL masking, and release-on-close all confirmed; the controller-busy
 signal remains an assumption keyed on HTTP 423/503).

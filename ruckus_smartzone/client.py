@@ -30,6 +30,11 @@ from ruckus_smartzone.exceptions import (
     raise_for_response,
 )
 from ruckus_smartzone.logging_config import get_logger, mask_url, set_log_level
+from ruckus_smartzone.resources import (
+    WLANGroupsResource,
+    WLANsResource,
+    ZonesResource,
+)
 from ruckus_smartzone.ticket_cache import InMemoryTicketCache, TicketCache
 
 logger = get_logger("ruckus_smartzone.client")
@@ -119,6 +124,10 @@ class SmartZoneClient:
             password,
             ticket_cache or InMemoryTicketCache(),
         )
+
+        self.zones = ZonesResource(self)
+        self.wlans = WLANsResource(self)
+        self.wlan_groups = WLANGroupsResource(self)
 
     @property
     def controller_version(self) -> Optional[str]:

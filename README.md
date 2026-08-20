@@ -129,6 +129,60 @@ For paged list endpoints, `paginate()` fetches every page and returns the combin
 aps = client.paginate("aps", page_size=1000)
 ```
 
+### Resource wrappers
+
+For zones, WLANs and WLAN groups the client exposes dict-first resource wrappers
+on top of the low-level verbs, reached as `client.zones`, `client.wlans` and
+`client.wlan_groups`. They handle paths and pagination; `create`/`replace` take a
+request-body dict and every method returns the controller's JSON as a dict.
+
+```python
+# Zones (/rkszones). Workflows resolve a zone from its site code.
+zones = client.zones.list()
+zone = client.zones.find_by_name("EDQB0001")
+zid = zone["id"]
+client.zones.update(zid, {"description": "..."})   # PATCH: partial edit
+client.zones.get(zid)
+```
+
+```python
+# Zone WLANs (/rkszones/{zoneId}/wlans). Creation bodies vary by WLAN type,
+# so create/replace stay dict-first.
+wlans = client.wlans.list(zid)
+wlan = client.wlans.create(zid, {"name": "Guest", "ssid": "guest-ssid"})
+client.wlans.update(zid, wlan["id"], {"description": "..."})  # PATCH: partial edit
+client.wlans.find_by_name(zid, "Guest")
+```
+
+```python
+# WLAN groups (/rkszones/{zoneId}/wlangroups) — {name, description} only.
+group = client.wlan_groups.create(zid, "Commissioning", description="...")
+gid = group["id"]
+
+# Rename reaches only 'name'; membership is a separate collection and is untouched.
+client.wlan_groups.rename(zid, gid, "All Areas - Wireless")
+
+# get-by-name -> create-or-update (POST or PATCH; never PUT).
+client.wlan_groups.upsert_by_name(zid, "Commissioning", description="...")
+
+# Members are a first-class collection, addressed by WLAN id.
+client.wlan_groups.add_member(zid, gid, wlan["id"], accessVlan=10)
+client.wlan_groups.list_members(zid, gid)       # read from the group detail
+client.wlan_groups.modify_member(zid, gid, wlan["id"], {"accessVlan": 20})  # PATCH
+client.wlan_groups.remove_member(zid, gid, wlan["id"])
+```
+
+WLAN-group names are validated locally against the controller's constraints
+(2–32 printable characters, no leading/trailing space) before create/rename, so an
+invalid name raises `SmartZoneValidationError` without a round trip.
+
+**`update` (PATCH) vs `replace` (PUT).** Use `update` for a partial edit — it sends
+only the fields you pass. On zones and WLANs, `replace` (PUT) is a full-object
+replace that the controller validates against required business fields (e.g. a
+zone PUT needs `apMgmtVlan`, a WLAN PUT needs `radiusOptions`), so a partial body
+is rejected; prefer `update` unless you are supplying a complete object. WLAN
+groups have no PUT at all — `update`/`rename` (PATCH) is the only modify.
+
 ### Error handling
 
 ```python
