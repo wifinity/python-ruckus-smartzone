@@ -1,0 +1,60 @@
+# Agent guide — python-ruckus-smartzone
+
+## What this repo is
+
+Python client library for the Ruckus SmartZone (vSZ) public REST API. Targets
+API version `v13_1`. The client surface covers zones, WLANs, WLAN groups and
+their members, and access points.
+
+This repo is an early scaffold: build tooling, the spec-driven pipeline, the test
+harness and the exception/logging foundation are in place; the HTTP client,
+authentication and resource wrappers are not yet implemented.
+
+## Spec-driven models
+
+The controller serves a Swagger 2.0 document at `/wsg/apiDoc/openapi`. Model
+metadata is generated from it rather than hand-written:
+
+| Step | Tool | Reads → writes |
+|------|------|----------------|
+| fetch | `tools/fetch_spec.py` | controller → `spec/raw/all.json` + `spec/raw/manifest.json` |
+| generate | `tools/generate_models.py` | `spec/raw/all.json` → `ruckus_smartzone/generated/models/` |
+| validate | `tools/validate_spec.py` | `spec/raw/all.json` |
+
+`fetch_spec.sanitize_spec()` overwrites the spec's `host` with a placeholder (so
+no controller address is committed and the checked-in spec is host-independent)
+and normalises a defined set of vendor conformance quirks in place — `type: file`
+response schemas, typed string defaults, out-of-enum defaults, and `{name:regex}`
+path templates — so the spec validates. The runtime base URL is supplied by the
+client. `spec/raw/` is empty until a spec is fetched from a controller.
+
+## Package layout (`ruckus_smartzone/`)
+
+| Path | Purpose |
+|------|---------|
+| `ruckus_smartzone/__init__.py` | Package version and public exports |
+| `ruckus_smartzone/exceptions.py` | `SmartZoneAPIError` hierarchy |
+| `ruckus_smartzone/logging_config.py` | Log level control and sensitive-header masking |
+| `ruckus_smartzone/generated/models/` | Generated schema index (committed artifact) |
+
+Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
+
+## Conventions
+
+- **Distribution** `ruckus-smartzone`; **import** `ruckus_smartzone`.
+- **Entry point (planned):** `from ruckus_smartzone import SmartZoneClient`.
+- **Public API is dict-first**; the generated schema index is an internal artifact.
+- **Errors** derive from `SmartZoneAPIError`, carrying `status_code` and `response_data`.
+- **HTTP transport** is `httpx`-based.
+
+## Testing
+
+- Full suite: `make tests` (`lint`, `type-check`, `unit-tests`).
+- Tests in `tests/` use `pytest` with `respx` for HTTP isolation; pipeline tools
+  are tested offline with inline spec fixtures (no live controller).
+
+## Where to look
+
+- **Index:** [INDEX.md](INDEX.md)
+- **Decision record:** [adr/0001-api-version-and-spec-availability.md](adr/0001-api-version-and-spec-availability.md)
+- **Memory:** [.agents/memory/python-ruckus-smartzone-repository-memory.md](../.agents/memory/python-ruckus-smartzone-repository-memory.md)

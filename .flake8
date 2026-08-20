@@ -1,0 +1,10 @@
+[flake8]
+ignore = E226,E302,E41, W503, E741, E203
+max-line-length = 160
+exclude =
+    tests/*
+    */migrations/*
+max-complexity = 10
+per-file-ignores =
+    # imported but unused
+    __init__.py: F401
