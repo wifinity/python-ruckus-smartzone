@@ -70,3 +70,6 @@ uv.lock
 Thumbs.db
 
 test.py
+
+# Local-only working notes; not for committing/publishing.
+docs/local/

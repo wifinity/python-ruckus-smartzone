@@ -8,9 +8,9 @@ their members, and access points.
 
 Build tooling, the spec-driven pipeline, the test harness, the exception/logging
 foundation, and the HTTP client with its service-ticket session lifecycle and
-transport resilience are in place. Zone, WLAN, and WLAN-group resource wrappers
-are implemented (reached via `client.zones`, `client.wlans`,
-`client.wlan_groups`). AP resource wrappers are not yet implemented.
+transport resilience are in place. Zone, WLAN, WLAN-group, and access-point
+resource wrappers are implemented (reached via `client.zones`, `client.wlans`,
+`client.wlan_groups`, `client.access_points`).
 
 ## Spec-driven models
 
@@ -42,7 +42,8 @@ client. `spec/raw/` is empty until a spec is fetched from a controller.
 | `ruckus_smartzone/exceptions.py` | `SmartZoneAPIError` hierarchy and status/error-code mapping |
 | `ruckus_smartzone/logging_config.py` | Log level control; header and URL-query masking |
 | `ruckus_smartzone/validation.py` | Client-side field validation (WLAN-group name constraints) |
-| `ruckus_smartzone/resources/` | Dict-first zone/WLAN/WLAN-group resource wrappers |
+| `ruckus_smartzone/mac.py` | MAC validation and colon-uppercase normalisation |
+| `ruckus_smartzone/resources/` | Dict-first zone/WLAN/WLAN-group/access-point resource wrappers |
 | `ruckus_smartzone/generated/models/` | Generated schema index (committed artifact) |
 
 Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
@@ -66,5 +67,6 @@ Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
 ## Where to look
 
 - **Index:** [INDEX.md](INDEX.md)
-- **Decision record:** [adr/0001-api-version-and-spec-availability.md](adr/0001-api-version-and-spec-availability.md)
+- **Decision records:** [adr/](adr/) — API version (0001), auth/transport (0002),
+  zone/WLAN/group wrappers (0003), access points (0004)
 - **Memory:** [.agents/memory/python-ruckus-smartzone-repository-memory.md](../.agents/memory/python-ruckus-smartzone-repository-memory.md)

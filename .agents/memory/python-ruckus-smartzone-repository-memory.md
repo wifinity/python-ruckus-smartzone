@@ -32,8 +32,19 @@ In place:
   (`ruckus_smartzone/resources/`, reached as `client.zones`, `client.wlans`,
   `client.wlan_groups`), plus client-side WLAN-group name validation
   (`validation.py`). See ADR 0003 for the design and live verification.
+- Access-point resource wrapper (`resources/access_points.py`, reached as
+  `client.access_points`): list/get/create/update/replace/delete,
+  `operational_summary`, bulk `query` (POST `/query/ap`, page/limit paging), and a
+  chunked `move` returning per-batch `MoveResult`. A MAC module (`mac.py`,
+  `normalize_mac`) validates and normalises to colon-uppercase. `move`/`update`/
+  `replace` take an optional `expected_zone_id` pre-flight guard that raises
+  `SmartZoneZoneMismatchError` before any write. See ADR 0004.
 
-Not yet implemented: the access-point resource wrappers. See ADR 0002 for the
+Live verification of the AP layer is complete (physical test AP, `v13_1`
+controller): `move` is the adoption trigger and propagates to
+`operational/summary` in under two seconds each way, the pre-flight zone guard
+fires, the `query` paginator walks the full inventory, and `delete` is the only
+operation that frees an AP's capacity license — see ADR 0004. See ADR 0002 for the
 auth/session/transport design and its live verification (logon, multi-page AP
 pagination, URL masking, and release-on-close all confirmed; the controller-busy
 signal remains an assumption keyed on HTTP 423/503).
@@ -74,8 +85,13 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
 - WLAN groups have no `PUT`; the group object is created with `POST` and updated
   with `PATCH` accepting only `{name, description}`. Membership is managed through
   a separate `/members` sub-resource.
-- `POST /aps/move` is capped at 50 MACs per call and accepts a target zone or AP
-  group.
+- `POST /aps/move` is capped at 50 MACs per call; `targetZoneId` is required even
+  when moving to an AP group (`targetApGroupId`).
+- `POST /query/ap` returns bulk AP state and pages by `page`/`limit` in the POST
+  body (not the GET `index`/`listSize`), over the same `{totalCount, hasMore,
+  firstIndex, list}` shape.
+- `GET /aps/{apMac}` returns the AP config including its `zoneId`, which the
+  pre-flight zone guard reads.
 - MAC addresses are colon-separated uppercase (e.g. `8C:0C:90:2B:8B:90`).
 
 ## 5) Conventions

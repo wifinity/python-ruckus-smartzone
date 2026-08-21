@@ -31,6 +31,7 @@ from ruckus_smartzone.exceptions import (
 )
 from ruckus_smartzone.logging_config import get_logger, mask_url, set_log_level
 from ruckus_smartzone.resources import (
+    AccessPointsResource,
     WLANGroupsResource,
     WLANsResource,
     ZonesResource,
@@ -128,6 +129,7 @@ class SmartZoneClient:
         self.zones = ZonesResource(self)
         self.wlans = WLANsResource(self)
         self.wlan_groups = WLANGroupsResource(self)
+        self.access_points = AccessPointsResource(self)
 
     @property
     def controller_version(self) -> Optional[str]:

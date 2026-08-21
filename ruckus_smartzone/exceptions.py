@@ -141,6 +141,30 @@ class SmartZoneBusyError(SmartZoneAPIError):
         super().__init__(message, status_code=status_code, response_data=response_data)
 
 
+class SmartZoneZoneMismatchError(SmartZoneAPIError):
+    """Raised when an AP is not in the zone the caller expected.
+
+    A client-side pre-flight refusal: move and update take an ``expected_zone_id``
+    and this is raised before any write when one or more APs sit elsewhere, so a
+    wrong MAC cannot touch an AP outside the caller's intended zone.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        mismatches: Optional[Dict[str, Optional[str]]] = None,
+    ) -> None:
+        """Initialize zone-mismatch error.
+
+        Args:
+            message: Error message.
+            mismatches: Map of AP MAC to the zone id it is actually in (``None``
+                when the AP has no zone), for each AP that failed the check.
+        """
+        super().__init__(message)
+        self.mismatches = mismatches or {}
+
+
 # SmartZone returns a 403 with this vendor error code for objects the caller is
 # entitled to but that do not exist; it is treated as "not found".
 NOT_FOUND_ERROR_CODE = 211

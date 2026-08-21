@@ -131,10 +131,11 @@ aps = client.paginate("aps", page_size=1000)
 
 ### Resource wrappers
 
-For zones, WLANs and WLAN groups the client exposes dict-first resource wrappers
-on top of the low-level verbs, reached as `client.zones`, `client.wlans` and
-`client.wlan_groups`. They handle paths and pagination; `create`/`replace` take a
-request-body dict and every method returns the controller's JSON as a dict.
+For zones, WLANs, WLAN groups and access points the client exposes dict-first
+resource wrappers on top of the low-level verbs, reached as `client.zones`,
+`client.wlans`, `client.wlan_groups` and `client.access_points`. They handle paths
+and pagination; `create`/`replace` take a request-body dict and every method
+returns the controller's JSON as a dict.
 
 ```python
 # Zones (/rkszones). Workflows resolve a zone from its site code.
@@ -171,6 +172,33 @@ client.wlan_groups.list_members(zid, gid)       # read from the group detail
 client.wlan_groups.modify_member(zid, gid, wlan["id"], {"accessVlan": 20})  # PATCH
 client.wlan_groups.remove_member(zid, gid, wlan["id"])
 ```
+
+```python
+# Access points (/aps) — keyed on a global MAC namespace, not fenced by zone.
+# MACs are normalised to colon-uppercase (8C:0C:90:2B:8B:90) for every request.
+aps = client.access_points.list(zone_id=zid)          # filter by zone
+ap = client.access_points.get("8c0c902b8b90")         # any written form accepted
+client.access_points.create({"mac": mac, "zoneId": zid, "name": "AP-1"})
+client.access_points.update(mac, {"description": "..."}, expected_zone_id=zid)  # PATCH
+client.access_points.delete(mac)
+client.access_points.operational_summary(ap["mac"])   # live check-in / applied state
+states = client.access_points.query()                 # bulk state via POST /query/ap
+
+# Move whole sites without knowing the 50-MAC cap: move() chunks and reports
+# per-batch outcomes. targetZoneId is required even for an AP-group move.
+result = client.access_points.move(
+    macs, target_zone_id=dest, target_ap_group_id=group, expected_zone_id=origin
+)
+if not result.all_succeeded:
+    print("failed:", result.failed_macs)
+```
+
+**Pre-flight zone guard.** `move`, `update` and `replace` accept an
+`expected_zone_id`. When set, each AP's current zone is checked first and the call
+is refused with `SmartZoneZoneMismatchError` — before any write — if an AP is
+elsewhere. This is what makes the unfenced, MAC-keyed AP calls safe against a
+production controller. `move` reports controller-side batch failures in its
+`MoveResult` rather than raising, so partial success stays visible.
 
 WLAN-group names are validated locally against the controller's constraints
 (2–32 printable characters, no leading/trailing space) before create/rename, so an

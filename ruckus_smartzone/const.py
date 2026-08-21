@@ -13,3 +13,6 @@ SERVICE_TICKET_PARAM = "serviceTicket"
 # Pagination: index/listSize with this shape of list response.
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGE_SIZE = 1000
+
+# POST /aps/move accepts at most this many MACs per call.
+MAX_MOVE_BATCH = 50
