@@ -1,6 +1,6 @@
 """Ruckus SmartZone API Python client library."""
 
-__version__ = "0.1.0"
+__version__ = "1.1.0"
 
 from ruckus_smartzone.client import SmartZoneClient
 from ruckus_smartzone.exceptions import (
@@ -18,6 +18,7 @@ from ruckus_smartzone.logging_config import set_log_level
 from ruckus_smartzone.mac import normalize_mac
 from ruckus_smartzone.resources import (
     AccessPointsResource,
+    APGroupsResource,
     MoveBatchResult,
     MoveResult,
     WLANGroupsResource,
@@ -32,6 +33,7 @@ __all__ = [
     "WLANsResource",
     "WLANGroupsResource",
     "AccessPointsResource",
+    "APGroupsResource",
     "MoveResult",
     "MoveBatchResult",
     "normalize_mac",

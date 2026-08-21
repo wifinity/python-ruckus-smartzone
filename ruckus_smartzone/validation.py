@@ -9,17 +9,17 @@ import re
 from ruckus_smartzone.exceptions import SmartZoneValidationError
 
 # common_normalName from the v13_1 spec: 2-32 printable characters, with no
-# leading or trailing space. Used for zone and WLAN-group names.
+# leading or trailing space. Used for zone, WLAN-group and AP-group names.
 NORMAL_NAME_MIN_LENGTH = 2
 NORMAL_NAME_MAX_LENGTH = 32
 NORMAL_NAME_PATTERN = re.compile(r"^[!-~]([ -~]){0,30}[!-~]$")
 
 
 def validate_group_name(name: str) -> str:
-    """Return ``name`` if it satisfies the WLAN-group name constraints.
+    """Return ``name`` if it satisfies the group-name constraints.
 
     Args:
-        name: Proposed WLAN-group name.
+        name: Proposed group name (WLAN group or AP group).
 
     Raises:
         SmartZoneValidationError: If the name is not a string of 2-32 printable
@@ -27,11 +27,11 @@ def validate_group_name(name: str) -> str:
     """
     if not isinstance(name, str):
         raise SmartZoneValidationError(
-            f"WLAN group name must be a string, got {type(name).__name__}"
+            f"group name must be a string, got {type(name).__name__}"
         )
     if not NORMAL_NAME_PATTERN.match(name):
         raise SmartZoneValidationError(
-            f"WLAN group name {name!r} is invalid: it must be "
+            f"group name {name!r} is invalid: it must be "
             f"{NORMAL_NAME_MIN_LENGTH}-{NORMAL_NAME_MAX_LENGTH} printable "
             "characters with no leading or trailing space"
         )

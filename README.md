@@ -131,16 +131,16 @@ aps = client.paginate("aps", page_size=1000)
 
 ### Resource wrappers
 
-For zones, WLANs, WLAN groups and access points the client exposes dict-first
-resource wrappers on top of the low-level verbs, reached as `client.zones`,
-`client.wlans`, `client.wlan_groups` and `client.access_points`. They handle paths
-and pagination; `create`/`replace` take a request-body dict and every method
-returns the controller's JSON as a dict.
+For zones, WLANs, WLAN groups, access points and AP groups the client exposes
+dict-first resource wrappers on top of the low-level verbs, reached as
+`client.zones`, `client.wlans`, `client.wlan_groups`, `client.access_points` and
+`client.ap_groups`. They handle paths and pagination; `create`/`replace` take a
+request-body dict and every method returns the controller's JSON as a dict.
 
 ```python
-# Zones (/rkszones). Workflows resolve a zone from its site code.
+# Zones (/rkszones). A zone is named from its site code.
 zones = client.zones.list()
-zone = client.zones.find_by_name("EDQB0001")
+zone = client.zones.find_by_name("SITE01")
 zid = zone["id"]
 client.zones.update(zid, {"description": "..."})   # PATCH: partial edit
 client.zones.get(zid)
@@ -193,6 +193,23 @@ if not result.all_succeeded:
     print("failed:", result.failed_macs)
 ```
 
+```python
+# AP groups (/rkszones/{zoneId}/apgroups) — a group pre-points its radios at
+# WLAN groups, so moving an AP into a group sets what it broadcasts.
+group = client.ap_groups.create(zid, "Wireless", description="...")
+agid = group["id"]
+client.ap_groups.set_radio_wlan_group(zid, agid, "radio5g", gid)  # point 5G radio
+client.ap_groups.upsert_by_name(zid, "Wireless")                  # get-by-name -> POST/PATCH
+
+# Switching an AP's group is a repeatable broadcast-profile change, distinct from
+# zone placement (access_points.move). The AP must already be in this zone; if it
+# is elsewhere the switch is refused with SmartZoneZoneMismatchError before any
+# write. Membership is keyed on the global AP MAC namespace.
+client.ap_groups.add_member(zid, agid, "8c0c902b8b90")
+client.ap_groups.remove_member(zid, agid, "8c0c902b8b90")
+client.ap_groups.clear_radio_wlan_group(zid, agid, "radio5g")     # drop the override
+```
+
 **Pre-flight zone guard.** `move`, `update` and `replace` accept an
 `expected_zone_id`. When set, each AP's current zone is checked first and the call
 is refused with `SmartZoneZoneMismatchError` — before any write — if an AP is
@@ -200,15 +217,16 @@ elsewhere. This is what makes the unfenced, MAC-keyed AP calls safe against a
 production controller. `move` reports controller-side batch failures in its
 `MoveResult` rather than raising, so partial success stays visible.
 
-WLAN-group names are validated locally against the controller's constraints
-(2–32 printable characters, no leading/trailing space) before create/rename, so an
-invalid name raises `SmartZoneValidationError` without a round trip.
+WLAN-group and AP-group names are validated locally against the controller's
+constraints (2–32 printable characters, no leading/trailing space) before
+create/rename, so an invalid name raises `SmartZoneValidationError` without a
+round trip.
 
 **`update` (PATCH) vs `replace` (PUT).** Use `update` for a partial edit — it sends
-only the fields you pass. On zones and WLANs, `replace` (PUT) is a full-object
-replace that the controller validates against required business fields (e.g. a
-zone PUT needs `apMgmtVlan`, a WLAN PUT needs `radiusOptions`), so a partial body
-is rejected; prefer `update` unless you are supplying a complete object. WLAN
+only the fields you pass. On zones, WLANs and AP groups, `replace` (PUT) is a
+full-object replace that the controller validates against required business fields
+(e.g. a zone PUT needs `apMgmtVlan`, a WLAN PUT needs `radiusOptions`), so a partial
+body is rejected; prefer `update` unless you are supplying a complete object. WLAN
 groups have no PUT at all — `update`/`rename` (PATCH) is the only modify.
 
 ### Error handling
@@ -293,4 +311,5 @@ make format   # apply black formatting
 
 ## Scope
 
-Zones, WLANs, WLAN groups and their members, and access points.
+Zones, WLANs, WLAN groups and their members, access points, and AP groups and
+their members.

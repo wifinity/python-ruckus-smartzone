@@ -1,7 +1,7 @@
 # python-ruckus-smartzone — agent entry point
 
 Python client library for the Ruckus SmartZone (vSZ) public API (zones, WLANs,
-WLAN groups, access points), targeting API version `v13_1`.
+WLAN groups, access points, AP groups), targeting API version `v13_1`.
 
 **Start here:**
 

@@ -8,6 +8,7 @@
 - [adr/0002-auth-session-and-transport.md](adr/0002-auth-session-and-transport.md) — service-ticket lifecycle, credential masking, transport resilience
 - [adr/0003-resource-wrappers-zones-wlans-wlangroups.md](adr/0003-resource-wrappers-zones-wlans-wlangroups.md) — zone/WLAN/WLAN-group resource layer; rename-preserves-membership proof
 - [adr/0004-access-points.md](adr/0004-access-points.md) — access-point resource layer; MAC normalisation, move chunking, pre-flight zone guard
+- [adr/0005-ap-groups.md](adr/0005-ap-groups.md) — AP-group resource layer; radio→WLAN-group overrides, zone-guarded membership, PUT full-replace
 
 ## Repository root
 

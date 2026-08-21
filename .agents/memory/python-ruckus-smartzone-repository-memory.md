@@ -5,7 +5,8 @@
 `python-ruckus-smartzone` is a Python client library for the Ruckus SmartZone
 (virtual SmartZone / vSZ) public REST API. It targets API version `v13_1` and
 provides a typed, resource-oriented wrapper over the endpoints needed to manage
-zones, WLANs, WLAN groups (and their members), and access points.
+zones, WLANs, WLAN groups (and their members), access points, and AP groups (and
+their members).
 
 A single client object owns an `httpx` session and composes resource objects. The
 public API is dict-first.
@@ -39,6 +40,21 @@ In place:
   `normalize_mac`) validates and normalises to colon-uppercase. `move`/`update`/
   `replace` take an optional `expected_zone_id` pre-flight guard that raises
   `SmartZoneZoneMismatchError` before any write. See ADR 0004.
+- AP-group resource wrapper (`resources/ap_groups.py`, reached as
+  `client.ap_groups`): list/get/get_default/create/update/replace/delete,
+  `find_by_name`/`upsert_by_name`, `add_member`/`remove_member`, and
+  `set_radio_wlan_group`/`clear_radio_wlan_group` for the per-radio WLAN-group
+  overrides. `create`/`update`/`replace` mirror the zone wrapper's dict-first
+  PATCH-partial / PUT-full split; names reuse `validate_group_name`. Placement
+  (`access_points.move`) and group switching are kept separate: `add_member`
+  refuses an AP not already in the group's zone. See ADR 0005.
+
+Live verification of the AP-group layer is complete (physical test AP, `v13_1`
+controller): CRUD, the radio-override round-trip, and membership all confirmed;
+`add_member` auto-removes an AP from its previous group (one AP group per zone)
+and the zone guard refuses a cross-zone AP; a partial `PUT` is rejected (HTTP 500
+on the missing required `name`); and `create` is zone-dependent (a minimal body
+succeeds in some zones and 500s in others by AP firmware/template). See ADR 0005.
 
 Live verification of the AP layer is complete (physical test AP, `v13_1`
 controller): `move` is the adoption trigger and propagates to
@@ -93,6 +109,17 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
 - `GET /aps/{apMac}` returns the AP config including its `zoneId`, which the
   pre-flight zone guard reads.
 - MAC addresses are colon-separated uppercase (e.g. `8C:0C:90:2B:8B:90`).
+- AP groups live under `/rkszones/{zoneId}/apgroups` (with a `/default` sibling).
+  Each group carries a `radioConfig` whose `radio{24g,5g,5gLower,5gUpper,6g}`
+  entries hold a `wlanGroupId`; a radio override is set through the group PATCH
+  and cleared via `DELETE …/apgroups/{id}/radioConfig/{radio}/wlanGroupId`.
+- AP-group membership is `POST`/`DELETE …/apgroups/{id}/members/{apMac}`, keyed on
+  the global AP MAC namespace (like `POST /aps/move`); an AP belongs to one AP
+  group per zone, so adding it to a group removes it from its previous one.
+- AP-group name is `common_normalName` (2-32 printable, no leading/trailing
+  space), the same constraint as zone and WLAN-group names.
+- AP-group `PUT` is a full-object replace (partial body rejected); `create`
+  body requirements vary by zone/AP-firmware, so a minimal body is not portable.
 
 ## 5) Conventions
 
