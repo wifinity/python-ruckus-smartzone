@@ -365,20 +365,18 @@ def test_upsert_patches_when_present(
     assert json.loads(patch.calls.last.request.content) == {"description": "updated"}
 
 
-def test_add_member_posts_to_normalized_mac_when_zone_matches(
+def test_add_member_sets_ap_group_when_zone_matches(
     respx_mock: respx.MockRouter, controller_url: str
 ) -> None:
     register_session(respx_mock)
     register_ap_zone(respx_mock, "z1")
-    route = respx_mock.post(f"{GROUPS}/g1/members/{MAC}").mock(
-        return_value=httpx.Response(200, json={})
-    )
+    route = respx_mock.patch(f"{BASE}/aps/{MAC}").mock(return_value=httpx.Response(204))
 
     with SmartZoneClient(controller_url, "admin", "pw") as client:
         client.ap_groups.add_member("z1", "g1", "8c0c902b8b90")
 
-    assert route.called
-    assert route.calls.last.request.content == b""
+    assert route.calls.last.request.method == "PATCH"
+    assert json.loads(route.calls.last.request.content) == {"apGroupId": "g1"}
 
 
 def test_add_member_refuses_on_zone_mismatch(
@@ -386,9 +384,7 @@ def test_add_member_refuses_on_zone_mismatch(
 ) -> None:
     register_session(respx_mock)
     register_ap_zone(respx_mock, "z2")
-    route = respx_mock.post(f"{GROUPS}/g1/members/{MAC}").mock(
-        return_value=httpx.Response(200, json={})
-    )
+    route = respx_mock.patch(f"{BASE}/aps/{MAC}").mock(return_value=httpx.Response(204))
 
     with SmartZoneClient(controller_url, "admin", "pw") as client:
         with pytest.raises(SmartZoneZoneMismatchError) as exc:
@@ -398,18 +394,21 @@ def test_add_member_refuses_on_zone_mismatch(
     assert not route.called
 
 
-def test_remove_member_deletes_normalized_mac(
+def test_remove_member_returns_ap_to_default_group(
     respx_mock: respx.MockRouter, controller_url: str
 ) -> None:
     register_session(respx_mock)
-    route = respx_mock.delete(f"{GROUPS}/g1/members/{MAC}").mock(
-        return_value=httpx.Response(204)
+    register_ap_zone(respx_mock, "z1")
+    respx_mock.get(f"{GROUPS}/default").mock(
+        return_value=httpx.Response(200, json={"id": "gd", "name": "default"})
     )
+    route = respx_mock.patch(f"{BASE}/aps/{MAC}").mock(return_value=httpx.Response(204))
 
     with SmartZoneClient(controller_url, "admin", "pw") as client:
         client.ap_groups.remove_member("z1", "g1", "8c0c902b8b90")
 
-    assert route.calls.last.request.method == "DELETE"
+    assert route.calls.last.request.method == "PATCH"
+    assert json.loads(route.calls.last.request.content) == {"apGroupId": "gd"}
 
 
 def test_set_radio_wlan_group_patches_radio_config(

@@ -4,6 +4,7 @@ import json
 from typing import List
 
 import httpx
+import pytest
 import respx
 
 from ruckus_smartzone import SmartZoneClient
@@ -77,7 +78,7 @@ def test_one_hundred_one_macs_split_into_three_calls(
     assert len(result.moved_macs) == 101
 
 
-def test_target_zone_always_sent_group_optional(
+def test_move_sends_only_target_zone(
     respx_mock: respx.MockRouter, controller_url: str
 ) -> None:
     register_session(respx_mock)
@@ -87,15 +88,25 @@ def test_target_zone_always_sent_group_optional(
 
     with SmartZoneClient(controller_url, "admin", "pw") as client:
         client.access_points.move(make_macs(1), target_zone_id="z1")
-        body = json.loads(route.calls.last.request.content)
-        assert body["targetZoneId"] == "z1"
-        assert "targetApGroupId" not in body
 
-        client.access_points.move(
-            make_macs(1), target_zone_id="z1", target_ap_group_id="g1"
-        )
-        body = json.loads(route.calls.last.request.content)
-        assert body["targetApGroupId"] == "g1"
+    body = json.loads(route.calls.last.request.content)
+    assert body["targetZoneId"] == "z1"
+    # The endpoint is zone-only: an AP group is never folded into a move (it would
+    # half-apply). Placement is a separate apGroupId set (ap_groups.add_member).
+    assert "targetApGroupId" not in body
+
+
+def test_move_rejects_ap_group_argument(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    respx_mock.post(f"{BASE}/aps/move").mock(return_value=httpx.Response(200, json={}))
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        with pytest.raises(TypeError):
+            client.access_points.move(
+                make_macs(1), target_zone_id="z1", target_ap_group_id="g1"
+            )
 
 
 def test_per_batch_failure_is_visible_and_later_batches_attempted(

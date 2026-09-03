@@ -41,9 +41,10 @@ danger of writing to an AP that is not where the caller believes it is.
   and each `POST /aps/move` is one batch. A failed batch is recorded and the
   remaining batches are still attempted; the return value is a `MoveResult` of per-
   batch `MoveBatchResult`s (`all_succeeded`, `moved_macs`, `failed_macs`), so
-  partial success is visible rather than swallowed. `targetZoneId` is always sent
-  (the endpoint requires it even for an AP-group move); `targetApGroupId` is sent
-  when given.
+  partial success is visible rather than swallowed. `move` is **zone-only**: it
+  sends `targetZoneId` and never `targetApGroupId`. Folding an AP group into the
+  move half-applies on this controller (it records a member row without re-homing
+  the AP's `apGroupId`); placement is a separate `apGroupId` set — see ADR-0005.
 - **Pre-flight zone guard**: `move`, `update` and `replace` take an optional
   `expected_zone_id`. When set, each AP's current `zoneId` is read via
   `GET /aps/{apMac}` and, if any AP is elsewhere, `SmartZoneZoneMismatchError` is

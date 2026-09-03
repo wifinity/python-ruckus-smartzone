@@ -199,11 +199,10 @@ class AccessPointsResource(BaseResource):
         macs: List[str],
         *,
         target_zone_id: str,
-        target_ap_group_id: Optional[str] = None,
         expected_zone_id: Optional[str] = None,
         chunk_size: int = MAX_MOVE_BATCH,
     ) -> MoveResult:
-        """Move APs to another zone (and optionally AP group), chunked at 50.
+        """Move APs to another zone, chunked at 50.
 
         The MACs are normalised and, when ``expected_zone_id`` is set, every AP is
         pre-flight checked before any move is issued. The move is then split into
@@ -211,11 +210,15 @@ class AccessPointsResource(BaseResource):
         batch's outcome is recorded, so a failed batch is visible rather than
         silently swallowed; later batches are still attempted.
 
+        This moves an AP between zones only. Placing an AP in an AP group is a
+        separate operation — set the AP's ``apGroupId`` via :meth:`update` (which
+        :meth:`APGroupsResource.add_member` wraps). Passing an AP group into the
+        move endpoint records group membership without re-homing the AP's
+        ``apGroupId``, leaving the two out of sync, so that path is not offered.
+
         Args:
             macs: AP MACs to move.
-            target_zone_id: Destination zone id (required by the endpoint even
-                when moving to an AP group).
-            target_ap_group_id: Destination AP-group id within the target zone.
+            target_zone_id: Destination zone id.
             expected_zone_id: When set, every AP is refused unless it is in this
                 zone (see :meth:`_verify_zone`); no move is issued on a mismatch.
             chunk_size: Maximum MACs per call; capped at the endpoint's limit.
@@ -234,8 +237,6 @@ class AccessPointsResource(BaseResource):
                 "apMacs": batch,
                 "targetZoneId": target_zone_id,
             }
-            if target_ap_group_id is not None:
-                body["targetApGroupId"] = target_ap_group_id
             try:
                 response = self.client.post(f"{_PATH}/move", json=body)
                 result.batches.append(

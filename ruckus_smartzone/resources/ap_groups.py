@@ -6,9 +6,13 @@ into a group is what changes the SSIDs that AP broadcasts. An AP belongs to one
 AP group per zone; its zone placement is a separate concern owned by
 ``access_points.move``.
 
-This wraps ``/rkszones/{zoneId}/apgroups`` and two sub-resources: membership at
-``/members/{apMac}`` (keyed on the global AP MAC namespace) and the per-radio
-``wlanGroupId`` overrides under ``/radioConfig/{radio}/wlanGroupId``.
+This wraps ``/rkszones/{zoneId}/apgroups`` and its per-radio ``wlanGroupId``
+overrides under ``/radioConfig/{radio}/wlanGroupId``. Membership is not written
+through the group's ``/members`` sub-resource: that half-applies (it records a
+member row without re-homing the AP's ``apGroupId``, leaving the two inconsistent
+and wedging further member calls), so :meth:`add_member` / :meth:`remove_member`
+set the AP's ``apGroupId`` directly via ``access_points.update`` instead, which the
+controller mirrors back into the group's member list.
 
 ``update`` (PATCH) carries only the fields given. ``replace`` (PUT) is a
 full-object replace: the controller rejects a partial body and rejects an
@@ -18,7 +22,6 @@ echoed-back detail body, so a PUT must carry a complete, curated body.
 from typing import Any, Dict, List, Optional
 
 from ruckus_smartzone.exceptions import SmartZoneNotFoundError
-from ruckus_smartzone.mac import normalize_mac
 from ruckus_smartzone.resources.base import BaseResource, find_one_by_name
 from ruckus_smartzone.validation import validate_group_name
 
@@ -27,10 +30,6 @@ _RADIOS = ("radio24g", "radio5g", "radio5gLower", "radio5gUpper", "radio6g")
 
 def _path(zone_id: str) -> str:
     return f"rkszones/{zone_id}/apgroups"
-
-
-def _members_path(zone_id: str, group_id: str) -> str:
-    return f"{_path(zone_id)}/{group_id}/members"
 
 
 def _validate_radio(radio: str) -> str:
@@ -139,25 +138,46 @@ class APGroupsResource(BaseResource):
     def add_member(
         self, zone_id: str, group_id: str, ap_mac: str
     ) -> Optional[Dict[str, Any]]:
-        """Move an AP into this group, switching what it broadcasts.
+        """Place an AP in this group, switching what it broadcasts.
 
-        The AP must already be in ``zone_id``: its current zone is checked first
-        and, if it is elsewhere, the move is refused before any write. Zone
-        placement is a separate operation (``access_points.move``).
+        Sets the AP's ``apGroupId`` via ``access_points.update`` — the single
+        source of truth the controller mirrors into the group's member list —
+        rather than posting to the group's ``/members`` sub-resource, which
+        half-applies and wedges. The AP must already be in ``zone_id``: the
+        update refuses (before any write) if it is elsewhere. Zone placement is a
+        separate operation (``access_points.move``).
 
         Raises:
             SmartZoneZoneMismatchError: If the AP is not in ``zone_id``.
         """
-        mac = normalize_mac(ap_mac)
-        self.client.access_points._verify_zone([mac], zone_id)
-        return self.client.post(f"{_members_path(zone_id, group_id)}/{mac}")
+        return self.client.access_points.update(
+            ap_mac, {"apGroupId": group_id}, expected_zone_id=zone_id
+        )
 
     def remove_member(
         self, zone_id: str, group_id: str, ap_mac: str
     ) -> Optional[Dict[str, Any]]:
-        """Remove an AP from this group by MAC."""
-        mac = normalize_mac(ap_mac)
-        return self.client.delete(f"{_members_path(zone_id, group_id)}/{mac}")
+        """Remove an AP from ``group_id`` by returning it to the zone default group.
+
+        An AP always belongs to exactly one AP group per zone, so "remove from
+        this group" means "move to the zone's default group". Sets the AP's
+        ``apGroupId`` to the default group's id via ``access_points.update``, for
+        the same reason as :meth:`add_member`. ``group_id`` names the group being
+        left (kept for caller symmetry); the AP must already be in ``zone_id``.
+
+        Raises:
+            SmartZoneNotFoundError: If the zone has no default AP group.
+            SmartZoneZoneMismatchError: If the AP is not in ``zone_id``.
+        """
+        default = self.get_default(zone_id) or {}
+        default_id = default.get("id")
+        if not isinstance(default_id, str) or not default_id:
+            raise SmartZoneNotFoundError(
+                response_data={"message": f"Zone {zone_id!r} has no default AP group"}
+            )
+        return self.client.access_points.update(
+            ap_mac, {"apGroupId": default_id}, expected_zone_id=zone_id
+        )
 
     def set_radio_wlan_group(
         self, zone_id: str, group_id: str, radio: str, wlan_group_id: str

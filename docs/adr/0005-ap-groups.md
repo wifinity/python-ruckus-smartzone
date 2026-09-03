@@ -45,15 +45,18 @@ names.
   is rejected (HTTP 400). So `update` is PATCH for partial edits and `replace`
   (PUT) is used only with a complete, curated body. `create` validates the name
   and passes through any extra body fields (e.g. `radioConfig`).
-- **Zone-guarded membership.** `add_member(zone_id, group_id, ap_mac)` normalises
-  the MAC and, because the members endpoint is keyed on the global MAC namespace,
-  first reads the AP's current zone and refuses with `SmartZoneZoneMismatchError`
-  — before any write — unless the AP is already in `zone_id`. This keeps the two
-  operations strictly separate: an AP-group switch never moves an AP between
-  zones, and a wrong MAC cannot reach an AP in another zone. The guard reuses the
-  same pre-flight the access-point wrapper uses. `remove_member` is an unguarded,
-  MAC-normalised delete (detaching a member the AP does not have is a controller
-  no-op).
+- **Membership is set via the AP's `apGroupId`, not the `/members` endpoint.**
+  `add_member(zone_id, group_id, ap_mac)` sets the AP's `apGroupId` through
+  `access_points.update(mac, {"apGroupId": group_id}, expected_zone_id=zone_id)`;
+  the controller mirrors that into the group's member list. `remove_member`
+  returns the AP to the zone's `default` group (resolved via `get_default`) the
+  same way. Both reuse `update`'s `expected_zone_id` pre-flight, so an AP-group
+  switch never moves an AP between zones and refuses with
+  `SmartZoneZoneMismatchError` — before any write — if the AP is elsewhere. The
+  `POST`/`DELETE .../members/{apMac}` calls and folding a group into
+  `access_points.move` (`targetApGroupId`) are **not** used: live testing found
+  they half-apply — recording a member row without re-homing the AP's `apGroupId`
+  — which then wedges further member calls (see Live verification).
 - **Radio WLAN-group overrides.** `set_radio_wlan_group` sends a PATCH carrying
   only `{"radioConfig": {radio: {"wlanGroupId": ...}}}`; `clear_radio_wlan_group`
   issues the dedicated per-radio DELETE. Both reject an unknown radio locally.
@@ -63,9 +66,11 @@ names.
 
 ## Consequences
 
-- The membership guard costs one `GET /aps/{apMac}` before the add, and requires
-  zone placement to have happened first — which matches the intended split
-  between placement (`access_points.move`) and broadcast-profile switching.
+- Setting membership costs one `PATCH /aps/{apMac}` plus the pre-flight
+  `GET /aps/{apMac}`, and requires zone placement to have happened first — which
+  matches the intended split between placement (`access_points.move`) and
+  broadcast-profile switching. `remove_member` additionally reads
+  `GET .../apgroups/default`.
 - `replace` callers must supply a complete object; partial changes go through
   `update`.
 - `create` accepting pass-through fields keeps the richer AP-group body
@@ -88,7 +93,7 @@ AP returned to its original zone and group afterward, leaving nothing behind.
   the former group's `members` no longer listed it and the AP's `apGroupId`
   became the new group. `remove_member` returned the AP to the zone's `default`
   AP group. This confirms an AP belongs to exactly one AP group per zone, so a
-  group switch is a single `add_member`, not a remove-then-add.
+  group switch is a single call, not a remove-then-add.
 - **Zone guard fires live.** `add_member` for an AP in another zone raised
   `SmartZoneZoneMismatchError` (carrying `{mac: actual_zone}`) and issued no
   write. Placing the AP in the zone first (via `access_points.move`) let the same
@@ -98,6 +103,25 @@ AP returned to its original zone and group afterward, leaving nothing behind.
   missing `name` returned HTTP 500 from the backend (a null-key error on the
   required `name`). The conclusion is the same — PUT is a full-object replace and
   needs a complete, curated body; use `update` (PATCH) for partial edits.
+
+### Fresh-adoption placement half-applies via `/members` and `move` (2026-09-03)
+
+A later live test (a first-time-onboarded AP that should have landed in
+`Commissioning`) exposed the failure the current design avoids. When placement was
+folded into the adoption move — `access_points.move(target_zone_id, target_ap_group_id)`
+— the controller re-homed the AP into the zone's `default` group and only wrote a
+`members` row for the target group; the AP's own `apGroupId` (both config body and
+`operational/summary`) stayed `default`. HTTP 200, half-applied. The stray member
+row then wedged the `/members` endpoint: `POST` returned 422 `errorCode 302` ("AP …
+already exist") and `DELETE` returned HTTP 500 ("current AP Group are inconsistent
+for AP … data in database and data sent from Web UI").
+
+Setting the AP's `apGroupId` directly — `access_points.update(mac, {"apGroupId": …})`
+— re-homed the AP and reconciled the member list, with both `apGroupId` sources
+reflecting the target within seconds. So `move`'s `target_ap_group_id` was removed
+and `add_member`/`remove_member` were re-pointed at the `apGroupId` PATCH. The AP's
+`apGroupId` is the single source of truth for placement; the `/members` sub-resource
+and `move(targetApGroupId)` are not written.
 
 ### AP-group create is zone-dependent (drift note)
 
