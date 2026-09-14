@@ -5,8 +5,8 @@
 `python-ruckus-smartzone` is a Python client library for the Ruckus SmartZone
 (virtual SmartZone / vSZ) public REST API. It targets API version `v13_1` and
 provides a typed, resource-oriented wrapper over the endpoints needed to manage
-zones, WLANs, WLAN groups (and their members), access points, and AP groups (and
-their members).
+zones, WLANs, WLAN groups (and their members), access points, AP groups (and
+their members), and to read firewall and precedence profiles.
 
 A single client object owns an `httpx` session and composes resource objects. The
 public API is dict-first.
@@ -48,6 +48,13 @@ In place:
   PATCH-partial / PUT-full split; names reuse `validate_group_name`. Placement
   (`access_points.move`) and group switching are kept separate: `add_member`
   refuses an AP not already in the group's zone. See ADR 0005.
+- Firewall-profile and precedence-profile read wrappers
+  (`resources/firewall_profiles.py`, `resources/precedence_profiles.py`, reached as
+  `client.firewall_profiles` / `client.precedence_profiles`): `list`/`get`/
+  `find_by_name` over the global `/firewallProfiles` and `/precedence` collections.
+  Read-only — they exist to resolve a profile name to that controller's id for a WLAN
+  body (`firewallProfileId` / `precedenceProfileId` are per-controller ids with no name
+  form). Reuse the shared `find_one_by_name`. See ADR 0006.
 
 Live verification of the AP-group layer is complete (physical test AP, `v13_1`
 controller): CRUD, the radio-override round-trip, and membership all confirmed;
@@ -120,6 +127,13 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
   space), the same constraint as zone and WLAN-group names.
 - AP-group `PUT` is a full-object replace (partial body rejected); `create`
   body requirements vary by zone/AP-firmware, so a minimal body is not portable.
+- Firewall profiles (`GET /firewallProfiles`) and precedence profiles
+  (`GET /precedence`) are global (not zone-scoped); list items carry `id` + `name`. A
+  WLAN body's `firewallProfileId` / `precedenceProfileId` take a plain id with no name
+  form, and the WLAN API accepts an unknown id silently (the profile ends up unset), so
+  the id must be resolved per controller. The `/precedence` list response carries an
+  extra top-level key beyond `{totalCount, hasMore, firstIndex, list}` that the
+  paginator ignores.
 
 ## 5) Conventions
 

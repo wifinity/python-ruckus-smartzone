@@ -131,11 +131,12 @@ aps = client.paginate("aps", page_size=1000)
 
 ### Resource wrappers
 
-For zones, WLANs, WLAN groups, access points and AP groups the client exposes
-dict-first resource wrappers on top of the low-level verbs, reached as
-`client.zones`, `client.wlans`, `client.wlan_groups`, `client.access_points` and
-`client.ap_groups`. They handle paths and pagination; `create`/`replace` take a
-request-body dict and every method returns the controller's JSON as a dict.
+For zones, WLANs, WLAN groups, access points, AP groups, and firewall and
+precedence profiles the client exposes dict-first resource wrappers on top of the
+low-level verbs, reached as `client.zones`, `client.wlans`, `client.wlan_groups`,
+`client.access_points`, `client.ap_groups`, `client.firewall_profiles` and
+`client.precedence_profiles`. They handle paths and pagination; `create`/`replace`
+take a request-body dict and every method returns the controller's JSON as a dict.
 
 ```python
 # Zones (/rkszones). A zone is named from its site code.
@@ -208,6 +209,16 @@ client.ap_groups.upsert_by_name(zid, "Wireless")                  # get-by-name 
 client.ap_groups.add_member(zid, agid, "8c0c902b8b90")
 client.ap_groups.remove_member(zid, agid, "8c0c902b8b90")
 client.ap_groups.clear_radio_wlan_group(zid, agid, "radio5g")     # drop the override
+```
+
+```python
+# Firewall (/firewallProfiles) and precedence (/precedence) profiles are global to
+# the controller. A WLAN body takes firewallProfileId / precedenceProfileId as plain
+# ids with no name form, and those ids differ per controller, so resolve by name
+# against the target controller before building the body.
+fw_id = client.firewall_profiles.find_by_name("System Default")["id"]
+pr_id = client.precedence_profiles.find_by_name("System Default")["id"]
+client.firewall_profiles.list()
 ```
 
 **Pre-flight zone guard.** `move`, `update` and `replace` accept an
