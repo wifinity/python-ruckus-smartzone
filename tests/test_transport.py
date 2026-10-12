@@ -157,6 +157,32 @@ def test_persistent_401_raises_after_single_refresh(
     assert aps.call_count == 2
 
 
+def test_multipart_post_resent_after_ticket_refresh(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    respx_mock.post(f"{BASE}/serviceTicket").mock(
+        side_effect=[
+            httpx.Response(200, json={"serviceTicket": "t-1"}),
+            httpx.Response(200, json={"serviceTicket": "t-2"}),
+        ]
+    )
+    upload = respx_mock.post(f"{BASE}/upload").mock(
+        side_effect=[
+            httpx.Response(401, json={}),
+            httpx.Response(201, json={"resultCount": 1}),
+        ]
+    )
+
+    client = SmartZoneClient(controller_url, "admin", "pw")
+    result = client.post("upload", files={"uploadFile": ("a.csv", b"x,y\n")})
+
+    assert result == {"resultCount": 1}
+    assert upload.call_count == 2
+    for call in upload.calls:
+        assert call.request.headers["content-type"].startswith("multipart/form-data")
+        assert b"x,y" in call.request.content
+
+
 def test_connection_error_wrapped(
     respx_mock: respx.MockRouter, controller_url: str
 ) -> None:

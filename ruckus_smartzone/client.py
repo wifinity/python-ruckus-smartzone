@@ -33,6 +33,7 @@ from ruckus_smartzone.logging_config import get_logger, mask_url, set_log_level
 from ruckus_smartzone.resources import (
     AccessPointsResource,
     APGroupsResource,
+    DPSKResource,
     FirewallProfilesResource,
     PrecedenceProfilesResource,
     WLANGroupsResource,
@@ -136,6 +137,7 @@ class SmartZoneClient:
         self.ap_groups = APGroupsResource(self)
         self.firewall_profiles = FirewallProfilesResource(self)
         self.precedence_profiles = PrecedenceProfilesResource(self)
+        self.dpsk = DPSKResource(self)
 
     @property
     def controller_version(self) -> Optional[str]:
@@ -154,9 +156,14 @@ class SmartZoneClient:
         *,
         params: Optional[Dict[str, Any]] = None,
         json: Any = None,
+        files: Any = None,
     ) -> Optional[Dict[str, Any]]:
-        """Issue a POST and return the parsed JSON body."""
-        return self._request("POST", path, params=params, json=json)
+        """Issue a POST and return the parsed JSON body.
+
+        ``files`` sends a ``multipart/form-data`` body in httpx ``files`` form;
+        pass file content as bytes so a ticket-refresh retry can resend it.
+        """
+        return self._request("POST", path, params=params, json=json, files=files)
 
     def put(
         self,
@@ -269,6 +276,7 @@ class SmartZoneClient:
         *,
         params: Optional[Dict[str, Any]] = None,
         json: Any = None,
+        files: Any = None,
         _auth_retry: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Send one request with ticket injection, refresh and backoff."""
@@ -279,7 +287,7 @@ class SmartZoneClient:
         while True:
             try:
                 response = self._http.request(
-                    method, path, params=request_params, json=json
+                    method, path, params=request_params, json=json, files=files
                 )
             except httpx.RequestError as exc:
                 raise SmartZoneConnectionError(

@@ -56,6 +56,18 @@ In place:
   body (`firewallProfileId` / `precedenceProfileId` are per-controller ids with no name
   form). Reuse the shared `find_one_by_name`. See ADR 0006.
 
+- DPSK key resource wrapper (`resources/dpsk.py`, reached as `client.dpsk`):
+  per-WLAN `list`/`get`/`create`/`generate`/`update`/`delete`/`delete_many`/
+  `upload`/`find_by_user_name`, zone-wide `list_zone`, and the zone
+  `get_delete_expired`/`set_delete_expired` setting. The API has no single-key
+  create or per-key DELETE: `create` is `generate(amount=1)` over
+  `batchGenUnbound`, deletes POST an `idList` to the collection, and `PATCH`
+  takes only `userName`. `upload` sends multipart via the client's `files=`
+  kwarg on `post`. Live-verified on auto1: a WLAN create body with a `dpsk`
+  block 500s, so DPSK WLANs are created as WPA2 then PATCHed
+  `{dpsk: {dpskEnabled: true}}`; passphrases must be unique per WLAN, user
+  names need not be. See ADR 0007.
+
 Live verification of the AP-group layer is complete (physical test AP, `v13_1`
 controller): CRUD, the radio-override round-trip, and membership all confirmed;
 `add_member` auto-removes an AP from its previous group (one AP group per zone)

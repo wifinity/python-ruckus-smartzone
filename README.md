@@ -131,11 +131,11 @@ aps = client.paginate("aps", page_size=1000)
 
 ### Resource wrappers
 
-For zones, WLANs, WLAN groups, access points, AP groups, and firewall and
-precedence profiles the client exposes dict-first resource wrappers on top of the
-low-level verbs, reached as `client.zones`, `client.wlans`, `client.wlan_groups`,
-`client.access_points`, `client.ap_groups`, `client.firewall_profiles` and
-`client.precedence_profiles`. They handle paths and pagination; `create`/`replace`
+For zones, WLANs, WLAN groups, access points, AP groups, firewall and
+precedence profiles, and DPSK keys the client exposes dict-first resource wrappers
+on top of the low-level verbs, reached as `client.zones`, `client.wlans`,
+`client.wlan_groups`, `client.access_points`, `client.ap_groups`,
+`client.firewall_profiles`, `client.precedence_profiles` and `client.dpsk`. They handle paths and pagination; `create`/`replace`
 take a request-body dict and every method returns the controller's JSON as a dict.
 
 ```python
@@ -219,6 +219,27 @@ client.ap_groups.clear_radio_wlan_group(zid, agid, "radio5g")     # drop the ove
 fw_id = client.firewall_profiles.find_by_name("System Default")["id"]
 pr_id = client.precedence_profiles.find_by_name("System Default")["id"]
 client.firewall_profiles.list()
+```
+
+```python
+# DPSK keys (/rkszones/{zoneId}/wlans/{wlanId}/dpsk) on a DPSK-enabled WLAN.
+# The WLAN is created as plain WPA2 and then switched to DPSK with a PATCH; a
+# create body carrying a dpsk block fails with HTTP 500.
+wid = client.wlans.create(zid, {"name": "Res", "ssid": "Res", "encryption": {
+    "method": "WPA2", "algorithm": "AES", "passphrase": "...", "mfp": "disabled"}})["id"]
+client.wlans.update(zid, wid, {"dpsk": {"dpskEnabled": True}})
+# There is no single-key create or per-key DELETE in the API: create() is the
+# one-key form of generate() (batchGenUnbound), and deletes POST an idList.
+key = client.dpsk.create(zid, wid, user_name="room-101", passphrase="...", vlan_id=101)
+client.dpsk.create(zid, wid, user_name="residents", passphrase="...", group_dpsk=True)
+client.dpsk.generate(zid, wid, amount=3, user_name="student")  # student_0..2
+client.dpsk.list(zid, wid)
+client.dpsk.list_zone(zid)                                      # every WLAN in the zone
+client.dpsk.find_by_user_name(zid, wid, "room-101")
+client.dpsk.update(zid, wid, key["id"], user_name="room-102")   # userName only
+client.dpsk.upload(zid, wid, csv_text)                          # multipart CSV
+client.dpsk.delete_many(zid, wid, [key["id"]])                  # returns deleted count
+client.dpsk.set_delete_expired(zid, "AfterSixMonths")           # zone-wide setting
 ```
 
 **Pre-flight zone guard.** `move`, `update` and `replace` accept an

@@ -11,7 +11,7 @@ from ruckus_smartzone import (
 
 
 def test_version() -> None:
-    assert ruckus_smartzone.__version__ == "1.2.0"
+    assert ruckus_smartzone.__version__ == "1.3.0"
 
 
 def test_exports_are_callable() -> None:

@@ -6,6 +6,7 @@ from ruckus_smartzone.resources.access_points import (
     MoveResult,
 )
 from ruckus_smartzone.resources.ap_groups import APGroupsResource
+from ruckus_smartzone.resources.dpsk import DELETE_EXPIRED_INTERVALS, DPSKResource
 from ruckus_smartzone.resources.firewall_profiles import FirewallProfilesResource
 from ruckus_smartzone.resources.precedence_profiles import PrecedenceProfilesResource
 from ruckus_smartzone.resources.wlan_groups import WLANGroupsResource
@@ -20,6 +21,8 @@ __all__ = [
     "APGroupsResource",
     "FirewallProfilesResource",
     "PrecedenceProfilesResource",
+    "DPSKResource",
+    "DELETE_EXPIRED_INTERVALS",
     "MoveResult",
     "MoveBatchResult",
 ]
