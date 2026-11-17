@@ -5,12 +5,32 @@ and :meth:`~ruckus_smartzone.client.SmartZoneClient.paginate`, and return the
 parsed JSON bodies unchanged.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from ruckus_smartzone.exceptions import SmartZoneNotFoundError
 
 if TYPE_CHECKING:
     from ruckus_smartzone.client import SmartZoneClient
+
+
+RADIOS: Tuple[str, ...] = (
+    "radio24g",
+    "radio5g",
+    "radio5gLower",
+    "radio5gUpper",
+    "radio6g",
+)
+
+
+def validate_radio(radio: str) -> str:
+    """Return ``radio`` unchanged if it names a known radio.
+
+    Raises:
+        ValueError: If ``radio`` is not one of :data:`RADIOS`.
+    """
+    if radio not in RADIOS:
+        raise ValueError(f"radio must be one of {RADIOS}, got {radio!r}")
+    return radio
 
 
 class BaseResource:

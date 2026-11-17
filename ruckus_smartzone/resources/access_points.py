@@ -11,6 +11,11 @@ zone. Two responsibilities are owned here rather than by the caller:
   take an ``expected_zone_id`` and refuse, before any write, if an AP is not in
   that zone — so a wrong MAC cannot touch an AP the caller did not mean to change.
 
+An AP's own ``radioConfig.<radio>.wlanGroupId`` is an AP-level override that wins
+over its AP group's radio setting, so an AP carrying one keeps broadcasting that
+WLAN group whatever group it is placed in; :meth:`clear_radio_wlan_group` drops
+the override so the radio inherits from the AP group again.
+
 MACs are normalised to SmartZone's colon-uppercase form for every request.
 """
 
@@ -20,7 +25,7 @@ from typing import Any, Dict, List, Optional
 from ruckus_smartzone.const import DEFAULT_PAGE_SIZE, MAX_MOVE_BATCH, MAX_PAGE_SIZE
 from ruckus_smartzone.exceptions import SmartZoneAPIError, SmartZoneZoneMismatchError
 from ruckus_smartzone.mac import normalize_mac
-from ruckus_smartzone.resources.base import BaseResource
+from ruckus_smartzone.resources.base import BaseResource, validate_radio
 
 _PATH = "aps"
 
@@ -140,6 +145,35 @@ class AccessPointsResource(BaseResource):
         if validate_mesh is not None:
             params = {"validateMesh": validate_mesh}
         return self.client.delete(f"{_PATH}/{normalize_mac(mac)}", params=params)
+
+    def clear_radio_wlan_group(
+        self,
+        mac: str,
+        radio: str,
+        *,
+        expected_zone_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Clear an AP radio's ``wlanGroupId`` override (DELETE).
+
+        With the override gone the radio inherits the WLAN group of the AP's AP
+        group. ``GET /aps/{apMac}`` reports the override as
+        ``radioConfig.<radio>.wlanGroupId`` (null when the radio inherits).
+
+        Args:
+            mac: AP MAC.
+            radio: One of ``radio24g``, ``radio5g``, ``radio5gLower``,
+                ``radio5gUpper``, ``radio6g``.
+            expected_zone_id: When set, the AP is refused unless it is in this
+                zone (see :meth:`_verify_zone`).
+
+        Raises:
+            ValueError: If ``radio`` is not a known radio.
+        """
+        validate_radio(radio)
+        norm = normalize_mac(mac)
+        if expected_zone_id is not None:
+            self._verify_zone([norm], expected_zone_id)
+        return self.client.delete(f"{_PATH}/{norm}/radioConfig/{radio}/wlanGroupId")
 
     def operational_summary(self, mac: str) -> Optional[Dict[str, Any]]:
         """Return an AP's live operational state and applied configuration.

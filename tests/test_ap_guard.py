@@ -83,3 +83,38 @@ def test_move_refuses_before_any_write_on_mismatch(
             client.access_points.move([MAC], target_zone_id="z9", expected_zone_id="z1")
 
     assert not move_route.called
+
+
+def test_clear_radio_wlan_group_refuses_on_zone_mismatch(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    register_ap_zone(respx_mock, "z2")
+    route = respx_mock.delete(f"{BASE}/aps/{MAC}/radioConfig/radio5g/wlanGroupId").mock(
+        return_value=httpx.Response(204)
+    )
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        with pytest.raises(SmartZoneZoneMismatchError):
+            client.access_points.clear_radio_wlan_group(
+                MAC, "radio5g", expected_zone_id="z1"
+            )
+
+    assert not route.called
+
+
+def test_clear_radio_wlan_group_proceeds_when_zone_matches(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    register_ap_zone(respx_mock, "z1")
+    route = respx_mock.delete(f"{BASE}/aps/{MAC}/radioConfig/radio5g/wlanGroupId").mock(
+        return_value=httpx.Response(204)
+    )
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        client.access_points.clear_radio_wlan_group(
+            MAC, "radio5g", expected_zone_id="z1"
+        )
+
+    assert route.called

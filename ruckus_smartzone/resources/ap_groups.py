@@ -22,20 +22,16 @@ echoed-back detail body, so a PUT must carry a complete, curated body.
 from typing import Any, Dict, List, Optional
 
 from ruckus_smartzone.exceptions import SmartZoneNotFoundError
-from ruckus_smartzone.resources.base import BaseResource, find_one_by_name
+from ruckus_smartzone.resources.base import (
+    BaseResource,
+    find_one_by_name,
+    validate_radio,
+)
 from ruckus_smartzone.validation import validate_group_name
-
-_RADIOS = ("radio24g", "radio5g", "radio5gLower", "radio5gUpper", "radio6g")
 
 
 def _path(zone_id: str) -> str:
     return f"rkszones/{zone_id}/apgroups"
-
-
-def _validate_radio(radio: str) -> str:
-    if radio not in _RADIOS:
-        raise ValueError(f"radio must be one of {_RADIOS}, got {radio!r}")
-    return radio
 
 
 class APGroupsResource(BaseResource):
@@ -194,7 +190,7 @@ class APGroupsResource(BaseResource):
         Raises:
             ValueError: If ``radio`` is not a known radio.
         """
-        _validate_radio(radio)
+        validate_radio(radio)
         body = {"radioConfig": {radio: {"wlanGroupId": wlan_group_id}}}
         return self.client.patch(f"{_path(zone_id)}/{group_id}", json=body)
 
@@ -212,6 +208,6 @@ class APGroupsResource(BaseResource):
         Raises:
             ValueError: If ``radio`` is not a known radio.
         """
-        _validate_radio(radio)
+        validate_radio(radio)
         path = f"{_path(zone_id)}/{group_id}/radioConfig/{radio}/wlanGroupId"
         return self.client.delete(path)

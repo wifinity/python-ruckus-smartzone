@@ -183,6 +183,9 @@ client.access_points.create({"mac": mac, "zoneId": zid, "name": "AP-1"})
 client.access_points.update(mac, {"description": "..."}, expected_zone_id=zid)  # PATCH
 client.access_points.delete(mac)
 client.access_points.operational_summary(ap["mac"])   # live check-in / applied state
+# An AP-level radio wlanGroupId wins over the AP group's; clearing it makes the
+# radio inherit from the AP group again (radio24g/5g/5gLower/5gUpper/6g).
+client.access_points.clear_radio_wlan_group(mac, "radio24g", expected_zone_id=zid)
 states = client.access_points.query()                 # bulk state via POST /query/ap
 
 # Move whole sites without knowing the 50-MAC cap: move() chunks and reports

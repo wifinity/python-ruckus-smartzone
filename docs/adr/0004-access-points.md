@@ -87,3 +87,18 @@ physical AP, 2026-08-21, using non-customer test zones:
 The AP config-sync field `configState` walks `null → newConfig → fwApplied →
 configApplied → completed` (terminal `completed`); `connectionState` +
 `lastSeenTime` are the liveness signals (`uptime` reads `-1` even when adopted).
+
+## AP-level radio WLAN-group overrides
+
+An AP carries its own `radioConfig.<radio>.wlanGroupId` (radios `radio24g`,
+`radio5g`, `radio5gLower`, `radio5gUpper`, `radio6g`). When set it overrides the
+AP group's radio setting, so an AP placed in a new AP group keeps broadcasting the
+overriding WLAN group. `GET /aps/{apMac}` reports the override (`null` when the
+radio inherits); the `POST /query/ap` columns (`wlanGroup24Id` and friends)
+reflect what the AP last reported and lag behind.
+
+`clear_radio_wlan_group(mac, radio, *, expected_zone_id=None)` issues
+`DELETE /aps/{apMac}/radioConfig/{radio}/wlanGroupId`, validates the radio name
+locally, and honours the same pre-flight zone guard as `update`. On a `v13_1`
+controller the radio picks up its AP group's WLAN group within about three
+minutes of the DELETE.

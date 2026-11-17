@@ -3,9 +3,11 @@
 import json
 
 import httpx
+import pytest
 import respx
 
 from ruckus_smartzone import SmartZoneClient
+from ruckus_smartzone.exceptions import SmartZoneNotFoundError
 
 BASE = "https://smartzone.example:8443/wsg/api/public/v13_1"
 MAC = "8C:0C:90:2B:8B:90"
@@ -134,3 +136,62 @@ def test_operational_summary_reads_status(
         summary = client.access_points.operational_summary(MAC)
 
     assert summary == {"mac": MAC, "registrationState": "Approved"}
+
+
+def test_clear_radio_wlan_group_deletes_ap_override(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    route = respx_mock.delete(
+        f"{BASE}/aps/{MAC}/radioConfig/radio24g/wlanGroupId"
+    ).mock(return_value=httpx.Response(204))
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        client.access_points.clear_radio_wlan_group("8c-0c-90-2b-8b-90", "radio24g")
+
+    assert route.calls.last.request.method == "DELETE"
+
+
+@pytest.mark.parametrize(
+    "radio", ["radio24g", "radio5g", "radio5gLower", "radio5gUpper", "radio6g"]
+)
+def test_clear_radio_wlan_group_accepts_every_radio(
+    respx_mock: respx.MockRouter, controller_url: str, radio: str
+) -> None:
+    register_session(respx_mock)
+    route = respx_mock.delete(f"{BASE}/aps/{MAC}/radioConfig/{radio}/wlanGroupId").mock(
+        return_value=httpx.Response(204)
+    )
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        client.access_points.clear_radio_wlan_group(MAC, radio)
+
+    assert route.called
+
+
+def test_clear_radio_wlan_group_rejects_unknown_radio(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    route = respx_mock.delete(url__regex=rf"{BASE}/aps/.*/radioConfig/.*").mock(
+        return_value=httpx.Response(204)
+    )
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        with pytest.raises(ValueError):
+            client.access_points.clear_radio_wlan_group(MAC, "radio7g")
+
+    assert not route.called
+
+
+def test_clear_radio_wlan_group_propagates_not_found(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    respx_mock.delete(f"{BASE}/aps/{MAC}/radioConfig/radio5g/wlanGroupId").mock(
+        return_value=httpx.Response(404, json={"message": "AP not found"})
+    )
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        with pytest.raises(SmartZoneNotFoundError):
+            client.access_points.clear_radio_wlan_group(MAC, "radio5g")

@@ -39,7 +39,10 @@ In place:
   chunked `move` returning per-batch `MoveResult`. A MAC module (`mac.py`,
   `normalize_mac`) validates and normalises to colon-uppercase. `move`/`update`/
   `replace` take an optional `expected_zone_id` pre-flight guard that raises
-  `SmartZoneZoneMismatchError` before any write. See ADR 0004.
+  `SmartZoneZoneMismatchError` before any write. `clear_radio_wlan_group`
+  DELETEs an AP-level `radioConfig.<radio>.wlanGroupId` override (which wins over
+  the AP group's radio setting) so the radio inherits from its AP group. See ADR
+  0004.
 - AP-group resource wrapper (`resources/ap_groups.py`, reached as
   `client.ap_groups`): list/get/get_default/create/update/replace/delete,
   `find_by_name`/`upsert_by_name`, `add_member`/`remove_member`, and
