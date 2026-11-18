@@ -72,5 +72,6 @@ Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
 - **Index:** [INDEX.md](INDEX.md)
 - **Decision records:** [adr/](adr/) — API version (0001), auth/transport (0002),
   zone/WLAN/group wrappers (0003), access points (0004), AP groups (0005),
-  firewall/precedence profiles (0006), DPSK keys (0007)
+  firewall/precedence profiles (0006), DPSK keys (0007),
+  Switch Manager spec (0008, proposed)
 - **Memory:** [.agents/memory/python-ruckus-smartzone-repository-memory.md](../.agents/memory/python-ruckus-smartzone-repository-memory.md)
