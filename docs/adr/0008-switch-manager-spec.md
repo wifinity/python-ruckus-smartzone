@@ -29,7 +29,16 @@ Facts read from a production `7.1.1.0.551` controller on 2026-11-18:
   the accepted enum.
 - **Response envelopes vary.** Most lists return `{totalCount, hasMore,
   firstIndex, list}`. Some (`/group/ids/byDomain/{id}`, `/registrationRules`)
-  wrap that in `{success, error, data}`.
+  wrap that in `{success, error, data}`. `hasMore` is unreliable: some lists
+  report `true` on their last page, so `totalCount` is the stop signal.
+- **Switch ids are MACs.** `POST /switch` has no serial filter; a full-text
+  search on the serial finds it.
+- **Configuration history ignores filters and sort fields.** `POST
+  /configurationHistory/query/{groupId}` lists the group's whole history,
+  oldest first.
+- **Error text is HTML-escaped** (`&quot;`, `&gt;`, `&#39;`).
+- **The served spec does not validate as-is.** One operation repeats a MIME
+  type in `produces`, and another repeats the `serviceTicket` parameter.
 - **Errors take four shapes:**
   - 422 `{success: false, error: {message}}` for request-schema violations.
   - 500 with `error.msgKey` for business-rule refusals, e.g.
@@ -79,11 +88,13 @@ Facts read from a production `7.1.1.0.551` controller on 2026-11-18:
   `spec/raw/switchm.json`, with its own entry in `spec/raw/manifest.json`
   (`source`, `spec_info_version`, `spec_sha256`, `fetched_at`, never the host).
 - The same `sanitize_spec()` runs on it: `host` overwritten with the
-  placeholder, vendor conformance quirks normalised in place.
+  placeholder, vendor conformance quirks normalised in place. Repeated MIME
+  entries and repeated parameters are collapsed, keeping the first.
 - `tools/validate_spec.py` validates both documents.
 - `tools/generate_models.py` writes the switchm schema index to its own module
-  under `ruckus_smartzone/generated/models/`. Definition names do not collide
-  with `wsg` in practice, but a separate module keeps the two specs apart.
+  (`switchm_schema_index.py`, `SWITCHM_SCHEMA_INDEX`). Definition names do not
+  collide with `wsg` in practice, but a separate module keeps the two specs
+  apart. Each tool takes `--spec` to work on one spec.
 
 ### One client, one ticket, two base paths
 
@@ -91,32 +102,47 @@ Facts read from a production `7.1.1.0.551` controller on 2026-11-18:
 - switchm calls go through a thin sub-client (`client.switchm`) that has the
   same verbs (`get`, `post`, `put`, `patch`, `delete`) but resolves paths
   against `/switchm/api/v13_1/`. The ticket, 401 refresh, retries, busy backoff
-  and URL masking are shared, not duplicated.
+  and URL masking are shared, not duplicated. `query()` pages POST query
+  bodies by `page`/`limit`; the AP query shares the same pager.
 - The pinned API version stays the single constant in `const.py`. Both base
   paths are built from it.
 - `raise_for_response()` also reads `error.message` and `error.msgKey` from
-  switchm bodies, so a business-rule refusal raises with its key rather than a
-  bare 500.
+  switchm bodies. A body with a `msgKey` raises `SmartZoneBusinessRuleError`
+  (with `msg_key`) rather than a bare 500, and `error.message` (HTML-decoded)
+  becomes the exception message.
 
 ### Deployment tracking is a first-class helper
 
-- A helper waits for the transaction a write started. It polls group
-  configuration history for entries newer than the write, then returns the
-  per-switch detail (`clis`, `dispatchStatus`, `dispatchFailedReason`).
-- A `FAILURE` raises with the line number and switch message.
+- `client.switchm.deployments.track(group_id, switch_ids)` snapshots the
+  transaction ids at the tail of the group history before a write.
+  `wait()` then polls the tail for new transactions on those switches. It
+  returns once at least one appeared, all report `SUCCESS`, and none new
+  arrived for a settle period (one write can start two transactions). New
+  transactions are told apart by id, not by time, so the caller's clock need
+  not match the controller's.
+- It returns each transaction with its per-switch detail (`clis`,
+  `dispatchStatus`).
+- A `FAILURE` raises `SmartZoneDeploymentError` at once, with `line` and
+  `switch_message`, and `local_config_conflict` for a push refused during a
+  CLI session. No result in time raises `SmartZoneDeploymentTimeoutError`.
 - Callers never treat the write's own 2xx as "the switch is configured".
 
 ### Write bodies are built, never echoed
 
-Resource wrappers send only the fields a caller sets, filtered to the
-operation's request schema. They never send a GET body back as a PUT.
+Resource wrappers send only the fields a caller sets. `build_body()` checks
+them against the operation's request definition in the generated switchm
+schema index, raises `ValueError` on an unknown field, and drops `None`. A GET
+body fails that check (it carries read-only keys such as `id`), so it is never
+sent back as a PUT. `authenticationType` is checked against the three accepted
+values before any request.
 
 ### Scope of the first resource layer
 
-These wrappers are added as consumers need them, each live-verified:
+These wrappers are reached as `client.switchm.<name>`:
 
 - switch groups
-- switches (query, get, move, delete)
+- switches (query, get, find by serial, move, delete, port details with LLDP
+  neighbours)
 - VLANs
 - port settings (single and bulk)
 - group AAA servers

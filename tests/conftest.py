@@ -1,9 +1,12 @@
 """Pytest configuration and fixtures."""
 
-from typing import List
+from typing import Iterator, List
 
 import pytest
 import respx
+
+from ruckus_smartzone import SmartZoneClient
+from tests.switchm_support import CONTROLLER, register_session
 
 
 @pytest.fixture
@@ -38,3 +41,11 @@ def service_ticket() -> str:
 def mocked_api(respx_mock: respx.MockRouter) -> respx.MockRouter:
     """Router for mocking HTTP API calls; no test performs real network I/O."""
     return respx_mock
+
+
+@pytest.fixture
+def sz(respx_mock: respx.MockRouter) -> Iterator[SmartZoneClient]:
+    """Open client with a mocked logon/logoff, for Switch Manager tests."""
+    register_session(respx_mock)
+    with SmartZoneClient(CONTROLLER, "admin", "pw") as client:
+        yield client

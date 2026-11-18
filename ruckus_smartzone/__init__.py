@@ -6,8 +6,11 @@ from ruckus_smartzone.client import SmartZoneClient
 from ruckus_smartzone.exceptions import (
     SmartZoneAPIError,
     SmartZoneAuthenticationError,
+    SmartZoneBusinessRuleError,
     SmartZoneBusyError,
     SmartZoneConnectionError,
+    SmartZoneDeploymentError,
+    SmartZoneDeploymentTimeoutError,
     SmartZoneNotFoundError,
     SmartZonePermissionError,
     SmartZoneRateLimitError,
@@ -28,6 +31,7 @@ from ruckus_smartzone.resources import (
     WLANsResource,
     ZonesResource,
 )
+from ruckus_smartzone.switchm import AUTHENTICATION_TYPES, SwitchManager
 from ruckus_smartzone.ticket_cache import InMemoryTicketCache, TicketCache
 
 __all__ = [
@@ -52,6 +56,11 @@ __all__ = [
     "SmartZoneConnectionError",
     "SmartZoneRateLimitError",
     "SmartZoneBusyError",
+    "SmartZoneBusinessRuleError",
+    "SmartZoneDeploymentError",
+    "SmartZoneDeploymentTimeoutError",
+    "SwitchManager",
+    "AUTHENTICATION_TYPES",
     "TicketCache",
     "InMemoryTicketCache",
     "set_log_level",

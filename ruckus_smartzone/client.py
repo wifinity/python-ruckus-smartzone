@@ -40,6 +40,7 @@ from ruckus_smartzone.resources import (
     WLANsResource,
     ZonesResource,
 )
+from ruckus_smartzone.switchm import SwitchManager, switchm_base_url
 from ruckus_smartzone.ticket_cache import InMemoryTicketCache, TicketCache
 
 logger = get_logger("ruckus_smartzone.client")
@@ -82,7 +83,11 @@ def _rate_limit_reset(response: httpx.Response) -> int:
 
 
 class SmartZoneClient:
-    """Client for the Ruckus SmartZone public API (``v13_1``)."""
+    """Client for the Ruckus SmartZone public API (``v13_1``).
+
+    ``switchm`` is the Switch Manager sub-client for ICX switches; it shares
+    this client's transport and service ticket.
+    """
 
     def __init__(
         self,
@@ -138,6 +143,7 @@ class SmartZoneClient:
         self.firewall_profiles = FirewallProfilesResource(self)
         self.precedence_profiles = PrecedenceProfilesResource(self)
         self.dpsk = DPSKResource(self)
+        self.switchm = SwitchManager(self, switchm_base_url(str(self._http.base_url)))
 
     @property
     def controller_version(self) -> Optional[str]:

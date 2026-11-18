@@ -6,7 +6,8 @@
 (virtual SmartZone / vSZ) public REST API. It targets API version `v13_1` and
 provides a typed, resource-oriented wrapper over the endpoints needed to manage
 zones, WLANs, WLAN groups (and their members), access points, AP groups (and
-their members), and to read firewall and precedence profiles.
+their members), and to read firewall and precedence profiles. ICX switches are
+managed through the Switch Manager API (`client.switchm`).
 
 A single client object owns an `httpx` session and composes resource objects. The
 public API is dict-first.
@@ -71,6 +72,19 @@ In place:
   `{dpsk: {dpskEnabled: true}}`; passphrases must be unique per WLAN, user
   names need not be. See ADR 0007.
 
+- Switch Manager sub-client (`ruckus_smartzone/switchm/`, reached as
+  `client.switchm`): verbs against `/switchm/api/v13_1/` through the shared
+  transport and ticket, a POST-query pager, and wrappers for switch groups,
+  switches (find by serial, move/approve, delete, port details with LLDP),
+  VLANs, port settings, group AAA servers/settings, DNS, switch
+  authentication, flex-auth profiles, CLI templates, config backups,
+  configuration history and jobs. Write bodies are built from caller fields
+  and checked against the generated switchm schema index (`build_body`).
+  `deployments.track()/wait()` waits for every new history transaction a
+  write starts and raises `SmartZoneDeploymentError` on `FAILURE` with the
+  failing line and switch message. `raise_for_response` maps an
+  `error.msgKey` body to `SmartZoneBusinessRuleError`. See ADR 0008.
+
 Live verification of the AP-group layer is complete (physical test AP, `v13_1`
 controller): CRUD, the radio-override round-trip, and membership all confirmed;
 `add_member` auto-removes an AP from its previous group (one AP group per zone)
@@ -92,13 +106,17 @@ signal remains an assumption keyed on HTTP 423/503).
 The controller serves a Swagger 2.0 document at `/wsg/apiDoc/openapi` (~1.6 MB,
 unauthenticated). Models are generated from it, not hand-written:
 
-- `tools/fetch_spec.py` — download the spec, overwrite its `host` with a
+- `tools/fetch_spec.py` — download the specs (`wsg` → `spec/raw/all.json`,
+  `switchm` → `spec/raw/switchm.json`), overwrite their `host` with a
   placeholder (no controller address is ever committed), and write
-  `spec/raw/all.json` + `spec/raw/manifest.json`. A controller base URL is
+  `spec/raw/manifest.json` with one entry per spec. A controller base URL is
   supplied at fetch time via `--base-url` / `SMARTZONE_BASE_URL`; never stored.
-- `tools/generate_models.py` — read `spec/raw/all.json` `definitions` and write a
-  committed schema index under `ruckus_smartzone/generated/models/`.
-- `tools/validate_spec.py` — validate `spec/raw/all.json`.
+- `tools/generate_models.py` — read each raw spec's `definitions` and write a
+  committed schema index under `ruckus_smartzone/generated/models/`
+  (`schema_index.py`, `switchm_schema_index.py`). The committed `wsg` index is
+  still empty (never regenerated); the switchm index is populated and used at
+  runtime.
+- `tools/validate_spec.py` — validate every raw spec present.
 
 The spec is Swagger 2.0 (OpenAPI 2), handled natively — `host` is the top-level
 field stripped on fetch, and `definitions` is the schema block. The fetch step
@@ -149,6 +167,33 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
   the id must be resolved per controller. The `/precedence` list response carries an
   extra top-level key beyond `{totalCount, hasMore, firstIndex, list}` that the
   paginator ignores.
+
+### Switch Manager (switchm, API v13_1)
+
+- Base path `/switchm/api/v13_1`, same service ticket as the public API.
+  Spec at `/switchm/api/openapi` (Swagger 2.0, unauthenticated); it needs
+  repeated MIME entries and repeated parameters collapsed to validate.
+- A switch's id is its MAC (colon-uppercase). `POST /switch` has no serial
+  filter: `find_by_serial` uses `fullTextSearch` and keeps exact matches.
+- Lists are POST queries paged by one-based `page`/`limit`. `hasMore` is
+  unreliable (true on the last page of some lists), so the pager trusts
+  `totalCount`. Filter types differ: port settings and VLANs filter on
+  `filters[].type = switchId` or `SWITCH_GROUP`; port details, backups and
+  jobs take `extraFilters[].type = SWITCH`.
+- `GET /group/ids/byDomain/{domainId}` wraps its list in `{success, data}` and
+  includes the domain's staging group (where unapproved switches land).
+- Group configuration history (`POST /configurationHistory/query/{groupId}`)
+  lists the whole history oldest first and ignores filters and sort fields;
+  the deployment tracker reads only its tail and tells new transactions apart
+  by id. Detail (`POST /configurationHistory/detail/query`, filter
+  `transactionId`) carries `clis` and `dispatchFailedReason[{lineNumber,
+  message}]`; switch text is HTML-escaped.
+- A missing object is a 404 with `errorCode` 211. Request-schema errors are 422
+  `{error: {message}}` with HTML-escaped text; business rules are 500 with
+  `error.msgKey`.
+- Flex-auth `authenticationType`: `802.1x`, `macauth`, `802.1x_and_macauth`
+  only (no enum in the spec).
+- CLI template deletes use the list entry `id`, not `cliTemplateConfigId`.
 
 ## 5) Conventions
 

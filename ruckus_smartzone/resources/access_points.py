@@ -25,7 +25,11 @@ from typing import Any, Dict, List, Optional
 from ruckus_smartzone.const import DEFAULT_PAGE_SIZE, MAX_MOVE_BATCH, MAX_PAGE_SIZE
 from ruckus_smartzone.exceptions import SmartZoneAPIError, SmartZoneZoneMismatchError
 from ruckus_smartzone.mac import normalize_mac
-from ruckus_smartzone.resources.base import BaseResource, validate_radio
+from ruckus_smartzone.resources.base import (
+    BaseResource,
+    collect_pages,
+    validate_radio,
+)
 
 _PATH = "aps"
 
@@ -199,34 +203,14 @@ class AccessPointsResource(BaseResource):
                 merged into every page's body.
             page_size: Items per page; clamped to the API maximum (1000).
         """
-        limit = min(page_size, MAX_PAGE_SIZE)
-        results: List[Dict[str, Any]] = []
-        fetched = 0
-        page = 1
-        while True:
+
+        def fetch(page: int, limit: int) -> Optional[Dict[str, Any]]:
             body = dict(criteria or {})
             body["page"] = page
             body["limit"] = limit
-            response = self.client.post("query/ap", json=body) or {}
+            return self.client.post("query/ap", json=body)
 
-            items = response.get("list") or []
-            results.extend(items)
-            fetched += len(items)
-
-            if not items:
-                break
-            total = response.get("totalCount")
-            has_more = response.get("hasMore")
-            if has_more is False:
-                break
-            if has_more is None:
-                if total is not None and fetched >= total:
-                    break
-                if len(items) < limit:
-                    break
-            page += 1
-
-        return results
+        return collect_pages(fetch, limit=min(page_size, MAX_PAGE_SIZE))
 
     def move(
         self,

@@ -33,3 +33,22 @@ def test_exception_status_codes() -> None:
     assert SmartZonePermissionError().status_code == 403
     assert SmartZoneNotFoundError().status_code == 404
     assert SmartZoneValidationError().status_code == 422
+
+
+def test_switchm_exports() -> None:
+    from ruckus_smartzone import (
+        AUTHENTICATION_TYPES,
+        SmartZoneBusinessRuleError,
+        SmartZoneDeploymentError,
+        SmartZoneDeploymentTimeoutError,
+        SwitchManager,
+    )
+
+    assert AUTHENTICATION_TYPES == ("802.1x", "macauth", "802.1x_and_macauth")
+    for exc in (
+        SmartZoneBusinessRuleError,
+        SmartZoneDeploymentError,
+        SmartZoneDeploymentTimeoutError,
+    ):
+        assert issubclass(exc, SmartZoneAPIError)
+    assert callable(SwitchManager)

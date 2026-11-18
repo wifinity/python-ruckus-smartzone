@@ -5,7 +5,7 @@ and :meth:`~ruckus_smartzone.client.SmartZoneClient.paginate`, and return the
 parsed JSON bodies unchanged.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from ruckus_smartzone.exceptions import SmartZoneNotFoundError
 
@@ -65,3 +65,36 @@ def find_one_by_name(
     if len(matches) > 1:
         raise ValueError(f"Multiple {kind}s found with name {name!r}")
     return matches[0]
+
+
+def collect_pages(
+    fetch_page: Callable[[int, int], Optional[Dict[str, Any]]], *, limit: int
+) -> List[Dict[str, Any]]:
+    """Walk a one-based ``page``/``limit`` list endpoint and return every item.
+
+    ``fetch_page(page, limit)`` returns one page in the ``{totalCount, hasMore,
+    list}`` shape. Paging stops on an empty page, on ``hasMore: false``, once
+    ``totalCount`` items have been fetched, or (with neither field) on a short
+    page. ``totalCount`` wins over ``hasMore`` because some endpoints report
+    ``hasMore: true`` on their last page.
+    """
+    results: List[Dict[str, Any]] = []
+    page = 1
+    while True:
+        response = fetch_page(page, limit) or {}
+        items = response.get("list") or []
+        results.extend(items)
+
+        if not items:
+            break
+        total = response.get("totalCount")
+        has_more = response.get("hasMore")
+        if has_more is False:
+            break
+        if total is not None and len(results) >= total:
+            break
+        if has_more is None and total is None and len(items) < limit:
+            break
+        page += 1
+
+    return results

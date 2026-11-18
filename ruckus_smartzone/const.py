@@ -6,6 +6,10 @@ API_VERSION = "v13_1"
 # Public API prefix; the versioned base path is PUBLIC_API_PATH/API_VERSION.
 PUBLIC_API_PATH = "/wsg/api/public"
 
+# Switch Manager prefix; its versioned base path is SWITCHM_API_PATH/API_VERSION.
+# It shares the public API's version and service ticket.
+SWITCHM_API_PATH = "/switchm/api"
+
 # The service ticket is carried as this URL query parameter on every request
 # (except logon), and on logoff.
 SERVICE_TICKET_PARAM = "serviceTicket"

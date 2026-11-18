@@ -18,6 +18,8 @@ API version `v13_1`.
 - **Typed exceptions**: a `SmartZoneAPIError` hierarchy mapped from HTTP status and
   vendor error codes
 - **Dict-first API**: methods return the controller's JSON payloads as dicts
+- **ICX switches**: Switch Manager API wrappers with a deployment waiter that
+  reports the failing CLI line
 - **Python 3.10+**: synchronous, built on `httpx`
 
 ## Installation
@@ -264,6 +266,94 @@ full-object replace that the controller validates against required business fiel
 body is rejected; prefer `update` unless you are supplying a complete object. WLAN
 groups have no PUT at all — `update`/`rename` (PATCH) is the only modify.
 
+### Switch Manager (ICX switches)
+
+SmartZone manages ICX switches through its Switch Manager service, a separate
+REST API at `/switchm/api/v13_1`. `client.switchm` reaches it with the same
+service ticket, retries and URL masking. Its verbs (`get`, `post`, `put`,
+`patch`, `delete`) take paths relative to that root, `query()` pages a POST
+query body, and these wrappers cover the common operations:
+
+| Attribute | Covers |
+|-----------|--------|
+| `groups` | switch groups of a domain: list, get, `find_by_name`, create, update, delete |
+| `switches` | query, `list_group`, get, `find_by_serial`, `move` (approve), delete, `port_details` (LLDP neighbours) |
+| `vlans` | group or switch VLANs: list, get, `default_vlan`, create, update, delete |
+| `port_settings` | per-port settings: `list_switch`, `find`, get, update, `bulk_update` |
+| `aaa_servers` | group AAA servers and AAA settings |
+| `dns` | group DNS server |
+| `authentication` | switch-level authentication (auth-default VLAN) |
+| `flex_auth_profiles` | flexible-authentication profiles |
+| `cli_templates` | `provision` and `update` CLI templates |
+| `config_backups` | backups, content, master-backup drift alerts |
+| `config_history` | deployment transactions and their per-switch detail |
+| `jobs` | firmware and scheduled jobs |
+| `deployments` | wait for a write's deployment to finish |
+
+A switch's id is its MAC (`02:00:00:AA:BB:01`); MACs are normalised for every
+request.
+
+```python
+sm = client.switchm
+
+# Find a newly registered switch by serial and approve it into the site group.
+switch = sm.switches.find_by_serial("FNG0000X000")
+group = sm.groups.find_by_name(switch["domainId"], "SITE01")
+sm.switches.move(group["id"], [switch["id"]])
+
+# Port flexible authentication needs switch-level authentication first.
+sm.authentication.update(switch["id"], enabled=True, default_vlan=4000)
+```
+
+**Writes deploy asynchronously.** A Switch Manager write returns at once; the
+switch is configured later, in one or more transactions in the group's
+configuration history. Wrap writes in `deployments` to wait for them and get
+the generated CLI back:
+
+```python
+port = sm.port_settings.find(switch["id"], "1/1/10")
+with sm.deployments.track(group["id"], [switch["id"]]) as tracker:
+    sm.port_settings.update(
+        port["id"],
+        {
+            "flexibleAuthenticationEnabled": True,
+            "authenticationType": "802.1x_and_macauth",
+            "authDefaultVlan": 91,
+        },
+    )
+done = tracker.wait(timeout=300)   # [{"transaction": ..., "details": [{"clis": ...}]}]
+
+# Or in one call: result, done = sm.deployments.run(group_id, lambda: ..., switch_ids=[...])
+```
+
+`wait()` raises `SmartZoneDeploymentError` when a transaction reports
+`FAILURE`, with `line` and `switch_message` from the switch. Lines before the
+failing one stay applied; there is no rollback. `local_config_conflict` is true
+when the switch refused the push because a CLI session was in config mode, which
+is worth a retry. `SmartZoneDeploymentTimeoutError` is raised if the
+deployment does not finish in time. A `SUCCESS` reports what the controller
+sent; the controller generates CLI as a diff against its own database, so check
+the switch (for example a config backup) when the outcome matters.
+
+**Write bodies are built from your fields.** Write methods take only the fields
+to change, keyed by their API names, and check them against the request schema
+of the generated Switch Manager spec: an unknown field raises `ValueError`
+before any request, and `None` values are dropped. Do not send a GET body back:
+it is refused by that check, and the controller would reject it anyway (null
+arrays give 422, firmware-gated objects such as `pppoeIa` give 500).
+`authenticationType` must be one of `AUTHENTICATION_TYPES` (`802.1x`,
+`macauth`, `802.1x_and_macauth`).
+
+**CLI templates.** A `provision` template runs once, on a factory switch's first
+approval into the group: it replaces the startup config and reloads the switch.
+An `update` template applies to the running config of the switches you list,
+with no reload. Delete a template by its list entry `id`, not its
+`cliTemplateConfigId`.
+
+**Deleting an online switch** disables its controller agent: the switch stops
+talking to SmartZone until its manager is re-enabled on the switch or it is
+factory-reset.
+
 ### Error handling
 
 ```python
@@ -276,6 +366,7 @@ from ruckus_smartzone import (
     SmartZoneRateLimitError,
     SmartZoneBusyError,
     SmartZoneConnectionError,
+    SmartZoneBusinessRuleError,
     SmartZoneAPIError,
 )
 
@@ -295,9 +386,15 @@ except SmartZoneBusyError:
     print("Controller busy serialising a configuration change")
 except SmartZoneConnectionError:
     print("Could not reach the controller")
+except SmartZoneBusinessRuleError as e:
+    print(f"Switch Manager refused the request: {e.msg_key}")
 except SmartZoneAPIError as e:
     print(f"API error: {e.status_code} - {e.message}")
 ```
+
+Switch Manager business-rule refusals come back as HTTP 500 with a stable
+`error.msgKey` and raise `SmartZoneBusinessRuleError`; branch on `msg_key`, not
+on the message. A Switch Manager `error.message` becomes the exception message.
 
 ### Rate limiting and busy retry
 
@@ -324,8 +421,8 @@ service ticket rides in the URL, it is masked as `serviceTicket=***`, and the
 
 ## Spec-driven models
 
-Model metadata is generated from the controller's Swagger 2.0 document rather than
-hand-written:
+Model metadata is generated from the controller's two Swagger 2.0 documents (the
+public API and the Switch Manager API) rather than hand-written:
 
 ```bash
 make spec-fetch-controller SMARTZONE_BASE_URL=https://<controller>:8443
@@ -346,5 +443,6 @@ make format   # apply black formatting
 
 ## Scope
 
-Zones, WLANs, WLAN groups and their members, access points, and AP groups and
-their members.
+Zones, WLANs, WLAN groups and their members, access points, AP groups and
+their members, firewall and precedence profiles, DPSK keys, and ICX switches
+through the Switch Manager API.
