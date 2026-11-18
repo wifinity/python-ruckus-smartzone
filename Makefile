@@ -26,17 +26,17 @@ unit-tests: ## Run unit tests
 tests: lint type-check unit-tests ## Run all tests
 test: tests
 
-spec-fetch: ## Fetch the SmartZone spec + manifest (pass args via SPEC_FETCH_ARGS)
+spec-fetch: ## Fetch the SmartZone specs + manifest (pass args via SPEC_FETCH_ARGS)
 	uv run $(PYTHON) tools/fetch_spec.py $(SPEC_FETCH_ARGS)
 
-spec-fetch-controller: ## Fetch from a controller (set SMARTZONE_BASE_URL; address not stored in repo)
+spec-fetch-controller: ## Fetch both specs from a controller (set SMARTZONE_BASE_URL; address not stored in repo)
 	@test -n "$(SMARTZONE_BASE_URL)" || { echo "SMARTZONE_BASE_URL is required (e.g. https://<controller>:8443)"; exit 1; }
 	uv run $(PYTHON) tools/fetch_spec.py --base-url "$(SMARTZONE_BASE_URL)" --insecure
 
-generate-models: ## Generate the internal schema index from the fetched spec
+generate-models: ## Generate the internal schema indexes from the fetched specs
 	uv run $(PYTHON) tools/generate_models.py
 
-spec-validate: ## Validate the fetched spec
+spec-validate: ## Validate the fetched specs
 	uv run $(PYTHON) tools/validate_spec.py
 
 venv: ## Create venv

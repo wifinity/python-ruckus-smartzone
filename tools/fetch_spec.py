@@ -1,15 +1,24 @@
-"""Fetch the Ruckus SmartZone Swagger 2.0 spec and stamp a version manifest.
+"""Fetch the Ruckus SmartZone Swagger 2.0 specs and stamp a version manifest.
 
-SmartZone serves a single machine-readable document at
-``{base}/wsg/apiDoc/openapi`` (Swagger 2.0, unauthenticated). There is no
-separate version endpoint, so the manifest anchors on the spec's own
-``info.version`` plus the fetch date, written alongside the raw spec.
+SmartZone serves two machine-readable documents, both Swagger 2.0 and
+unauthenticated:
+
+* ``wsg`` — the public API, at ``{base}/wsg/apiDoc/openapi``, written to
+  ``spec/raw/all.json``.
+* ``switchm`` — the Switch Manager API, at ``{base}/switchm/api/openapi``,
+  written to ``spec/raw/switchm.json``.
+
+There is no separate version endpoint, so the manifest anchors each spec on its
+own ``info.version`` plus the fetch date. ``spec/raw/manifest.json`` holds one
+entry per spec, keyed by spec name.
 
 Source selection:
 
-* ``--base-url URL`` (or ``SMARTZONE_BASE_URL``): the spec comes from
-  ``{base}/wsg/apiDoc/openapi``.
-* ``--url URL`` (or ``SMARTZONE_OPENAPI_URL``): explicit spec URL override.
+* ``--base-url URL`` (or ``SMARTZONE_BASE_URL``): each spec comes from its path
+  under the controller root.
+* ``--url URL`` (or ``SMARTZONE_OPENAPI_URL``): explicit spec URL override, only
+  valid when a single ``--spec`` is selected.
+* ``--spec NAME`` (repeatable): fetch only the named specs; all by default.
 
 A controller base URL is required; there is no public cloud default. The raw
 spec bakes the source controller into its top-level ``host`` field; the fetch
@@ -20,8 +29,9 @@ controller produced it. The SDK supplies the real base URL at runtime.
 The fetch step also normalises a few vendor-spec conformance quirks so the
 checked-in spec validates: ``type: file`` response schemas become a binary body,
 string defaults on numeric/boolean fields are coerced to their type, a default
-outside its own ``enum`` is dropped, and ``{name:regex}`` path templates are
-reduced to ``{name}``. Legal ``formData`` file parameters are left untouched.
+outside its own ``enum`` is dropped, ``{name:regex}`` path templates are
+reduced to ``{name}``, and repeated ``produces``/``consumes`` entries are
+collapsed. Legal ``formData`` file parameters are left untouched.
 """
 
 from __future__ import annotations
@@ -37,7 +47,6 @@ from pathlib import Path
 from typing import Mapping
 from urllib.request import Request, urlopen
 
-SPEC_PATH_SUFFIX = "/wsg/apiDoc/openapi"
 USER_AGENT = "python-ruckus-smartzone/0.1.0"
 
 # The controller bakes its own address into the Swagger 2.0 ``host`` field;
@@ -46,8 +55,19 @@ USER_AGENT = "python-ruckus-smartzone/0.1.0"
 # no host identity and are kept.
 HOST_PLACEHOLDER = "smartzone.example"
 
-RAW_SPEC_PATH = Path("spec/raw/all.json")
-MANIFEST_PATH = Path("spec/raw/manifest.json")
+RAW_DIR = Path("spec/raw")
+MANIFEST_PATH = RAW_DIR / "manifest.json"
+
+# Spec name -> (path under the controller root, file name under RAW_DIR).
+SPECS: dict[str, tuple[str, str]] = {
+    "wsg": ("/wsg/apiDoc/openapi", "all.json"),
+    "switchm": ("/switchm/api/openapi", "switchm.json"),
+}
+
+
+def raw_spec_path(name: str) -> Path:
+    """Return where the named spec is written."""
+    return RAW_DIR / SPECS[name][1]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -57,7 +77,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--base-url", help="Controller base URL; the spec path is derived from it."
     )
-    parser.add_argument("--url", help="Explicit spec URL override.")
+    parser.add_argument(
+        "--url", help="Explicit spec URL override (requires a single --spec)."
+    )
+    parser.add_argument(
+        "--spec",
+        action="append",
+        choices=sorted(SPECS),
+        help="Spec to fetch; repeatable. Defaults to every spec.",
+    )
     parser.add_argument(
         "--insecure",
         action="store_true",
@@ -73,26 +101,33 @@ def _normalize_base(base_url: str) -> str:
     return resolved
 
 
-def resolve_sources(
-    args: argparse.Namespace, env: Mapping[str, str]
-) -> tuple[str, str]:
-    """Return ``(spec_url, source_kind)``.
+def selected_specs(args: argparse.Namespace) -> list[str]:
+    """Return the spec names to fetch, in ``SPECS`` order."""
+    chosen = set(args.spec or SPECS)
+    return [name for name in SPECS if name in chosen]
+
+
+def resolve_sources(args: argparse.Namespace, env: Mapping[str, str]) -> dict[str, str]:
+    """Return ``{spec_name: spec_url}`` for the selected specs.
 
     A controller base URL (or explicit spec URL) is required; SmartZone has no
-    public cloud spec.
+    public cloud spec. An explicit URL names one document, so it needs exactly
+    one ``--spec``.
     """
+    names = selected_specs(args)
     base = args.base_url or env.get("SMARTZONE_BASE_URL")
     explicit_url = args.url or env.get("SMARTZONE_OPENAPI_URL")
 
     if base:
-        spec_url = f"{_normalize_base(base)}{SPEC_PATH_SUFFIX}"
-    elif explicit_url:
-        spec_url = explicit_url
-    else:
-        raise SystemExit(
-            "A controller base URL is required: pass --base-url or set SMARTZONE_BASE_URL."
-        )
-    return spec_url, "controller"
+        root = _normalize_base(base)
+        return {name: f"{root}{SPECS[name][0]}" for name in names}
+    if explicit_url:
+        if len(names) != 1:
+            raise SystemExit("--url names one spec: pass exactly one --spec with it.")
+        return {names[0]: explicit_url}
+    raise SystemExit(
+        "A controller base URL is required: pass --base-url or set SMARTZONE_BASE_URL."
+    )
 
 
 def resolve_verify(args: argparse.Namespace, env: Mapping[str, str]) -> bool:
@@ -144,6 +179,27 @@ def _coerce_default(node: dict) -> None:
             pass
 
 
+def _dedupe_lists(node: dict) -> None:
+    """Collapse repeated MIME entries and repeated (name, in) parameters."""
+    for key in ("produces", "consumes"):
+        mimes = node.get(key)
+        if isinstance(mimes, list) and all(isinstance(m, str) for m in mimes):
+            node[key] = list(dict.fromkeys(mimes))
+    params = node.get("parameters")
+    if not isinstance(params, list):
+        return
+    seen: set[tuple] = set()
+    unique = []
+    for param in params:
+        if isinstance(param, dict) and "name" in param:
+            ident = (param.get("name"), param.get("in"))
+            if ident in seen:
+                continue
+            seen.add(ident)
+        unique.append(param)
+    node["parameters"] = unique
+
+
 def _normalize_schema_nodes(node: object) -> None:
     """Normalise vendor-spec schema quirks so the document validates.
 
@@ -155,8 +211,13 @@ def _normalize_schema_nodes(node: object) -> None:
     - A ``default`` that is not one of its own ``enum`` values is dropped.
     - A ``{name:regex}`` regex suffix is stripped from an ``in: path`` parameter
       name so it matches the normalised path template.
+    - Repeated entries in a ``produces``/``consumes`` MIME list are collapsed,
+      keeping the first of each.
+    - A parameter repeated with the same ``name`` and ``in`` in one
+      ``parameters`` list is collapsed, keeping the first.
     """
     if isinstance(node, dict):
+        _dedupe_lists(node)
         if node.get("type") == "file" and "in" not in node:
             node["type"] = "string"
             node["format"] = "binary"
@@ -198,8 +259,8 @@ def sanitize_spec(spec: dict) -> dict:
 
     - Overwrite the top-level ``host`` so no source host/IP is written.
     - Normalise vendor-spec conformance quirks (binary response bodies, typed
-      defaults, out-of-enum defaults, ``{name:regex}`` path templates) so the
-      checked-in spec validates.
+      defaults, out-of-enum defaults, ``{name:regex}`` path templates, repeated
+      MIME entries and parameters) so the checked-in spec validates.
     """
     if "host" in spec:
         spec["host"] = HOST_PLACEHOLDER
@@ -219,33 +280,51 @@ def build_manifest(
     }
 
 
+def load_manifest(path: Path) -> dict:
+    """Return the manifest keyed by spec name.
+
+    A single-spec manifest (top-level ``source`` key) is read as the ``wsg``
+    entry.
+    """
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if "source" in data:
+        return {"wsg": data}
+    return data
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    spec_url, source = resolve_sources(args, os.environ)
+    sources = resolve_sources(args, os.environ)
     verify = resolve_verify(args, os.environ)
 
-    spec_payload = sanitize_spec(fetch_json(spec_url, verify=verify))
-    raw_bytes = (json.dumps(spec_payload, indent=2, sort_keys=True) + "\n").encode(
-        "utf-8"
-    )
-    RAW_SPEC_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RAW_SPEC_PATH.write_bytes(raw_bytes)
+    manifest = load_manifest(MANIFEST_PATH)
+    for name, spec_url in sources.items():
+        spec_payload = sanitize_spec(fetch_json(spec_url, verify=verify))
+        raw_bytes = (json.dumps(spec_payload, indent=2, sort_keys=True) + "\n").encode(
+            "utf-8"
+        )
+        raw_path = raw_spec_path(name)
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw_path.write_bytes(raw_bytes)
 
-    spec_info_version = (spec_payload.get("info") or {}).get("version")
-    manifest = build_manifest(
-        source=source,
-        spec_info_version=spec_info_version,
-        spec_sha256=hashlib.sha256(raw_bytes).hexdigest(),
-        fetched_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    )
+        manifest[name] = build_manifest(
+            source="controller",
+            spec_info_version=(spec_payload.get("info") or {}).get("version"),
+            spec_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+            fetched_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+        print(
+            f"Fetched {name} spec -> {raw_path} "
+            f"(spec_info_version={manifest[name]['spec_info_version']})"
+        )
+
+    MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST_PATH.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-
-    print(f"Fetched spec from {source} -> {RAW_SPEC_PATH}")
-    print(
-        f"Wrote manifest -> {MANIFEST_PATH} (spec_info_version={manifest['spec_info_version']})"
-    )
+    print(f"Wrote manifest -> {MANIFEST_PATH}")
 
 
 if __name__ == "__main__":

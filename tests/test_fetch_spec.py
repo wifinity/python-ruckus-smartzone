@@ -60,11 +60,11 @@ def _fake_loader(calls: list[str]):
 
 
 def _redirect_outputs(tmp_path, monkeypatch):
-    raw = tmp_path / "raw" / "all.json"
-    manifest = tmp_path / "raw" / "manifest.json"
-    monkeypatch.setattr(fetch_spec, "RAW_SPEC_PATH", raw)
+    raw_dir = tmp_path / "raw"
+    manifest = raw_dir / "manifest.json"
+    monkeypatch.setattr(fetch_spec, "RAW_DIR", raw_dir)
     monkeypatch.setattr(fetch_spec, "MANIFEST_PATH", manifest)
-    return raw, manifest
+    return raw_dir / "all.json", manifest
 
 
 def test_host_is_sanitized(tmp_path, monkeypatch):
@@ -72,7 +72,7 @@ def test_host_is_sanitized(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader(calls))
     raw, _ = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
     spec = json.loads(raw.read_text())
     assert spec["host"] == fetch_spec.HOST_PLACEHOLDER
@@ -83,9 +83,9 @@ def test_manifest_fields(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
     _, manifest = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
-    data = json.loads(manifest.read_text())
+    data = json.loads(manifest.read_text())["wsg"]
     assert data["source"] == "controller"
     assert data["spec_info_version"] == "v13_1"
     assert len(data["spec_sha256"]) == 64
@@ -95,7 +95,7 @@ def test_outputs_do_not_leak_controller_host(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
     raw, manifest = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
     assert "192.0.2.10" not in raw.read_text()
     assert "192.0.2.10" not in manifest.read_text()
@@ -105,9 +105,9 @@ def test_raw_bytes_are_deterministic(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
     raw, _ = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
     first = raw.read_bytes()
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
     assert raw.read_bytes() == first
 
@@ -116,7 +116,7 @@ def test_file_response_schema_is_normalized(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
     raw, _ = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
     spec = json.loads(raw.read_text())
     download = spec["paths"]["/download"]["get"]["responses"]["200"]["schema"]
@@ -130,7 +130,7 @@ def test_typed_defaults_and_enum_defaults_are_normalized(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
     raw, _ = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
     props = json.loads(raw.read_text())["definitions"]["WLAN"]["properties"]
     assert props["enabled"]["default"] is False
@@ -143,7 +143,7 @@ def test_regex_path_template_is_normalized(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
     raw, _ = _redirect_outputs(tmp_path, monkeypatch)
 
-    fetch_spec.main(["--base-url", CONTROLLER])
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "wsg"])
 
     paths = json.loads(raw.read_text())["paths"]
     assert "/cluster/{id}" in paths
@@ -158,3 +158,82 @@ def test_base_url_required(monkeypatch):
 
     with pytest.raises(SystemExit):
         fetch_spec.main([])
+
+
+def test_fetches_every_spec_by_default(tmp_path, monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader(calls))
+    raw, manifest = _redirect_outputs(tmp_path, monkeypatch)
+
+    fetch_spec.main(["--base-url", CONTROLLER])
+
+    assert calls == [
+        f"{CONTROLLER}/wsg/apiDoc/openapi",
+        f"{CONTROLLER}/switchm/api/openapi",
+    ]
+    switchm = raw.parent / "switchm.json"
+    assert json.loads(switchm.read_text())["host"] == fetch_spec.HOST_PLACEHOLDER
+    assert "192.0.2.10" not in switchm.read_text()
+    assert set(json.loads(manifest.read_text())) == {"wsg", "switchm"}
+
+
+def test_single_spec_keeps_other_manifest_entries(tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader([]))
+    raw, manifest = _redirect_outputs(tmp_path, monkeypatch)
+    manifest.parent.mkdir(parents=True)
+    legacy = {
+        "source": "controller",
+        "spec_info_version": "v13_1",
+        "spec_sha256": "a" * 64,
+        "fetched_at": "2026-01-01T00:00:00Z",
+    }
+    manifest.write_text(json.dumps(legacy))
+
+    fetch_spec.main(["--base-url", CONTROLLER, "--spec", "switchm"])
+
+    data = json.loads(manifest.read_text())
+    assert data["wsg"] == legacy
+    assert data["switchm"]["spec_info_version"] == "v13_1"
+    assert not raw.exists()
+
+
+def test_explicit_url_needs_one_spec(monkeypatch):
+    monkeypatch.delenv("SMARTZONE_BASE_URL", raising=False)
+
+    with pytest.raises(SystemExit):
+        fetch_spec.main(["--url", "https://192.0.2.10/spec"])
+
+
+def test_explicit_url_with_one_spec(tmp_path, monkeypatch):
+    monkeypatch.delenv("SMARTZONE_BASE_URL", raising=False)
+    calls: list[str] = []
+    monkeypatch.setattr(fetch_spec, "_load_url", _fake_loader(calls))
+    raw, _ = _redirect_outputs(tmp_path, monkeypatch)
+
+    fetch_spec.main(["--url", "https://192.0.2.10/spec", "--spec", "switchm"])
+
+    assert calls == ["https://192.0.2.10/spec"]
+    assert (raw.parent / "switchm.json").exists()
+
+
+def test_repeated_mimes_and_parameters_are_collapsed():
+    spec = {
+        "paths": {
+            "/group/{id}": {
+                "patch": {
+                    "produces": ["application/json", "application/json"],
+                    "parameters": [
+                        {"name": "serviceTicket", "in": "query", "type": "string"},
+                        {"name": "serviceTicket", "in": "query", "type": "string"},
+                        {"name": "id", "in": "path", "type": "string"},
+                        {"$ref": "#/parameters/shared"},
+                    ],
+                }
+            }
+        }
+    }
+
+    op = fetch_spec.sanitize_spec(spec)["paths"]["/group/{id}"]["patch"]
+
+    assert op["produces"] == ["application/json"]
+    assert [p.get("name") for p in op["parameters"]] == ["serviceTicket", "id", None]
