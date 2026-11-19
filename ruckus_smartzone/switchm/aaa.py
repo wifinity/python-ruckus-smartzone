@@ -28,7 +28,11 @@ class AAAServersResource(SwitchmResource):
     def update(
         self, group_id: str, server_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Modify an AAA server from ``aaaServers_createAdminAAAServer`` fields."""
+        """Modify an AAA server from ``aaaServers_createAdminAAAServer`` fields.
+
+        A Switch Manager PUT can reset fields it does not carry (proven for
+        port settings), so pass every field the object should keep.
+        """
         return self.switchm.put(
             f"group/{group_id}/aaaServers/{server_id}",
             json=build_body("aaaServers_createAdminAAAServer", fields),
@@ -54,7 +58,11 @@ class AAAServersResource(SwitchmResource):
     def update_settings(
         self, group_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Modify a group's AAA settings from ``aaaSettings_AAASetting`` fields."""
+        """Modify a group's AAA settings from ``aaaSettings_AAASetting`` fields.
+
+        A Switch Manager PUT can reset fields it does not carry (proven for
+        port settings), so pass every field the object should keep.
+        """
         return self.switchm.put(
             f"group/{group_id}/aaaSettings",
             json=build_body("aaaSettings_AAASetting", fields),

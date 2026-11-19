@@ -51,7 +51,11 @@ class VLANsResource(SwitchmResource):
     def update(
         self, vlan_config_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Update a VLAN config from ``vlanConfig_updateVlanConfig`` fields."""
+        """Update a VLAN config from ``vlanConfig_updateVlanConfig`` fields.
+
+        A Switch Manager PUT can reset fields it does not carry (proven for
+        port settings), so pass every field the object should keep.
+        """
         return self.switchm.put(
             f"vlans/{vlan_config_id}",
             json=build_body("vlanConfig_updateVlanConfig", fields),

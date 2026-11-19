@@ -7,6 +7,7 @@ from ruckus_smartzone.switchm.base import (
     build_body,
     check_authentication_type,
     join_macs,
+    merge_body,
 )
 
 
@@ -53,3 +54,27 @@ def test_join_macs_normalises_and_joins() -> None:
     assert join_macs("0200.00aa.bb01") == "02:00:00:AA:BB:01"
     with pytest.raises(ValueError):
         join_macs([])
+
+
+def test_merge_body_projects_current_and_applies_changes() -> None:
+    current = {
+        "id": "p1",
+        "portEnabled": True,
+        "lldpQosList": None,
+        "pppoeIa": {"enabled": False},
+        "portName": "old",
+    }
+
+    body = merge_body(
+        "portSettings_UpdatePortSettings",
+        current,
+        {"portName": "new", "poeEnabled": None},
+        drop=["pppoeIa"],
+    )
+
+    assert body == {"portEnabled": True, "portName": "new"}
+
+
+def test_merge_body_refuses_unknown_change() -> None:
+    with pytest.raises(ValueError):
+        merge_body("portSettings_UpdatePortSettings", {}, {"switchId": "x"})

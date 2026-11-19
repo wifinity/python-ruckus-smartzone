@@ -193,6 +193,11 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
   `error.msgKey`.
 - Flex-auth `authenticationType`: `802.1x`, `macauth`, `802.1x_and_macauth`
   only (no enum in the spec).
+- `PUT /portSettings/{id}` is a full replace: omitted fields reset (port
+  disabled, PoE and LLDP off). `port_settings.update()` reads the port and
+  PUTs `merge_body()` (GET projected onto the update schema, nulls and
+  `pppoeIa` dropped, caller fields applied). Other switchm PUTs are not yet
+  verified either way; assume full replace.
 - CLI template deletes use the list entry `id`, not `cliTemplateConfigId`.
 - Backup content (`GET /switchconfig/{id}`, `/switchconfig/download/{id}`) is
   plain text even where the content type says JSON; `config_backups.content`

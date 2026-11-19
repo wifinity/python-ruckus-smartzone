@@ -344,6 +344,14 @@ arrays give 422, firmware-gated objects such as `pppoeIa` give 500).
 `authenticationType` must be one of `AUTHENTICATION_TYPES` (`802.1x`,
 `macauth`, `802.1x_and_macauth`).
 
+**Port settings PUT is a full replace.** A field left out of the body is
+reset: an omitted `portEnabled` disables the port, an omitted `poeEnabled`
+turns PoE off. `port_settings.update()` reads the port first, keeps its
+writable fields (dropping nulls, and `pppoeIa` unless you set it), applies your
+changes and PUTs the full body, so you still pass only what changes.
+`port_settings.bulk_update()` sends its body as given: pass every setting the
+ports should keep.
+
 **CLI templates.** A `provision` template runs once, on a factory switch's first
 approval into the group: it replaces the startup config and reloads the switch.
 An `update` template applies to the running config of the switches you list,

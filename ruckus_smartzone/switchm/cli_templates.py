@@ -116,7 +116,11 @@ class CLITemplatesResource(SwitchmResource):
     def replace(
         self, kind: str, cli_template_config_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Modify a template config (PUT) from its kind's create fields."""
+        """Modify a template config (PUT) from its kind's create fields.
+
+        A Switch Manager PUT can reset fields it does not carry (proven for
+        port settings), so pass every field the object should keep.
+        """
         return self.switchm.put(
             f"clitemplate/{_kind(kind)}/{cli_template_config_id}",
             json=build_body(_DEFINITIONS[kind], fields),

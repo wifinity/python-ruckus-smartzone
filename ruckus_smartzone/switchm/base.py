@@ -42,6 +42,35 @@ def build_body(definition: str, fields: Mapping[str, Any]) -> Dict[str, Any]:
     return {key: value for key, value in fields.items() if value is not None}
 
 
+def merge_body(
+    definition: str,
+    current: Mapping[str, Any],
+    fields: Mapping[str, Any],
+    *,
+    drop: Iterable[str] = (),
+) -> Dict[str, Any]:
+    """Return a full write body: the current object with the caller's changes.
+
+    For full-replace PUTs, where a field left out of the body is reset. The
+    current object (a GET body) is cut down to the properties of
+    ``definition``, its ``None`` values and the ``drop`` keys are removed, and
+    the caller's non-``None`` fields are applied on top.
+
+    Raises:
+        ValueError: If a caller field is not a property of ``definition``.
+    """
+    changes = build_body(definition, fields)
+    allowed = SWITCHM_SCHEMA_INDEX[definition].get("properties") or {}
+    skipped = set(drop)
+    body = {
+        key: value
+        for key, value in current.items()
+        if key in allowed and key not in skipped and value is not None
+    }
+    body.update(changes)
+    return body
+
+
 def check_authentication_type(fields: Mapping[str, Any]) -> None:
     """Refuse an ``authenticationType`` the controller does not accept.
 

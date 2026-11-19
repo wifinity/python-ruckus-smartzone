@@ -136,6 +136,13 @@ body fails that check (it carries read-only keys such as `id`), so it is never
 sent back as a PUT. `authenticationType` is checked against the three accepted
 values before any request.
 
+`PUT /portSettings/{id}` is a full replace: a field the body leaves out is
+reset (found live, see below). `port_settings.update()` therefore reads the
+port and sends `merge_body()`: the GET body cut down to the update schema's
+properties, nulls and `pppoeIa` removed (unless the caller sets it), with the
+caller's fields applied. This is the one place a GET body feeds a write, and
+only after that projection.
+
 ### Scope of the first resource layer
 
 These wrappers are reached as `client.switchm.<name>`:
@@ -197,5 +204,22 @@ Two findings from this run changed the implementation:
 - Backup content is plain text served with a JSON content type, so it is
   read as text.
 
-Write paths and the deployment waiter are covered by unit tests. They have
-not yet run against the controller.
+Write paths, the same day, on the test switch only:
+
+- A port-name change sent as `{portName}` alone deployed as one
+  `PORT_CONFIGURATION` transaction (27 s). It also generated `disable`,
+  `no inline power`, `no speed-duplex auto` and `no lldp enable` for the port:
+  the PUT is a full replace.
+- The port was restored through the merged `port_settings.update()` (one
+  transaction, 42 s). It generated only the changed lines (`enable`,
+  `inline power`, `inline power priority 3`, `lldp enable`), with no resets.
+- A port-name revert deployed as one transaction (43 s) generating only
+  `no port-name …`.
+- An update CLI template with a bad second line made `wait()` raise
+  `SmartZoneDeploymentError` after 32 s, with `line=2` and the switch's
+  "Invalid input" text. The first line stayed applied.
+- `no snmp-server location` without its argument is refused by the switch
+  ("Incomplete command"). The undo needs the full line, and with it the
+  template deployed (32 s).
+- `cli_templates.delete()` by list entry `id` removed all three test
+  templates.

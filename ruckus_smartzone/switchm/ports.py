@@ -3,6 +3,10 @@
 Port settings are per switch port, keyed by a controller id; ``port`` holds
 the ``unit/module/port`` identifier (``1/1/10``). VLAN membership is written as
 strings (``untaggedVlans``, ``taggedVlans``).
+
+``PUT /portSettings/{id}`` is a full replace: a field left out of the body is
+reset (an omitted ``portEnabled`` disables the port, an omitted ``poeEnabled``
+turns PoE off).
 """
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional
@@ -13,9 +17,14 @@ from ruckus_smartzone.switchm.base import (
     SwitchmResource,
     build_body,
     check_authentication_type,
+    merge_body,
     single,
     switch_filter,
 )
+
+# Firmware-gated object that a PUT refuses on firmware without PPPoE IA
+# support, even when it is sent back unchanged.
+_FIRMWARE_GATED = ("pppoeIa",)
 
 
 class PortSettingsResource(SwitchmResource):
@@ -51,13 +60,13 @@ class PortSettingsResource(SwitchmResource):
     def update(
         self, port_settings_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Update one port from ``portSettings_UpdatePortSettings`` fields.
+        """Change some of one port's settings, keeping the rest.
 
-        Send only the fields to change. A port GET body is refused by the
-        schema check; sent as-is it would also fail on the controller (null
-        arrays are rejected, firmware-gated objects such as ``pppoeIa`` are
-        refused on older firmware). Flexible authentication on a port needs
-        switch-level authentication first
+        Reads the port, keeps its ``portSettings_UpdatePortSettings`` fields
+        (dropping nulls, which the controller rejects, and ``pppoeIa`` unless
+        ``fields`` sets it), applies ``fields`` and PUTs the full body, since
+        the PUT resets any field it does not carry. Flexible authentication on
+        a port needs switch-level authentication first
         (:class:`~ruckus_smartzone.switchm.authentication.SwitchAuthenticationResource`).
         One port write can start more than one deployment transaction.
 
@@ -66,15 +75,23 @@ class PortSettingsResource(SwitchmResource):
                 ``authenticationType``.
         """
         check_authentication_type(fields)
-        return self.switchm.put(
-            f"portSettings/{port_settings_id}",
-            json=build_body("portSettings_UpdatePortSettings", fields),
+        current = self.get(port_settings_id) or {}
+        body = merge_body(
+            "portSettings_UpdatePortSettings",
+            current,
+            fields,
+            drop=[key for key in _FIRMWARE_GATED if key not in fields],
         )
+        return self.switchm.put(f"portSettings/{port_settings_id}", json=body)
 
     def bulk_update(
         self, port_settings_ids: Iterable[str], fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Apply the same ``portSettings_createBulk`` fields to several ports.
+
+        The body is sent as given, with no merge. Not verified against a
+        controller: treat it as the same full replace as a single-port PUT and
+        pass every setting the ports should keep.
 
         Raises:
             ValueError: On no ids, an unknown field or an unaccepted

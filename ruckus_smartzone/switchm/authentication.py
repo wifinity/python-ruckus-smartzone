@@ -91,6 +91,9 @@ class FlexAuthProfilesResource(SwitchmResource):
     ) -> Optional[Dict[str, Any]]:
         """Update a profile from ``..._UpdateFlexibleAuthenticationProfile`` fields.
 
+        A Switch Manager PUT can reset fields it does not carry (proven for
+        port settings), so pass every field the object should keep.
+
         Raises:
             ValueError: On an unknown field or an unaccepted
                 ``authenticationType``.
