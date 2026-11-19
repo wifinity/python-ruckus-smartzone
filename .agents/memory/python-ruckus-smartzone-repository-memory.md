@@ -67,7 +67,7 @@ In place:
   create or per-key DELETE: `create` is `generate(amount=1)` over
   `batchGenUnbound`, deletes POST an `idList` to the collection, and `PATCH`
   takes only `userName`. `upload` sends multipart via the client's `files=`
-  kwarg on `post`. Live-verified on auto1: a WLAN create body with a `dpsk`
+  kwarg on `post`. Live-verified on a `v13_1` controller: a WLAN create body with a `dpsk`
   block 500s, so DPSK WLANs are created as WPA2 then PATCHed
   `{dpsk: {dpskEnabled: true}}`; passphrases must be unique per WLAN, user
   names need not be. See ADR 0007.

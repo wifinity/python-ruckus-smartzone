@@ -53,7 +53,7 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> FakeClock:
 
 
 class History:
-    """Group configuration history served oldest first, paged by the request."""
+    """Group configuration history served in stored order, paged by the request."""
 
     def __init__(self, respx_mock: respx.MockRouter, entries: List[Dict]) -> None:
         self.entries = entries

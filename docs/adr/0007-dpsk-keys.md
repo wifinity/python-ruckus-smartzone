@@ -69,7 +69,7 @@ controller returns `id` (UUID), `userName`, `passphrase`, `vlanId`, `userRoleId`
 
 ## Live verification
 
-Run against auto1 (`v13_1`, SmartZone 7.1.1.0.551) on 2026-10-12 in a throwaway
+Run against a `v13_1` controller (SmartZone 7.1.1.0.551) on 2026-10-12 in a throwaway
 WLAN in the PRODUCT_TEST zone; every object was removed afterwards.
 
 - **DPSK WLAN creation.** `POST /rkszones/{zoneId}/wlans` with a `dpsk` block

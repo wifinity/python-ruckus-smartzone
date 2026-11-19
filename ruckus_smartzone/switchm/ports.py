@@ -86,9 +86,8 @@ class PortSettingsResource(SwitchmResource):
     ) -> Optional[Dict[str, Any]]:
         """Apply the same ``portSettings_createBulk`` fields to several ports.
 
-        The body is sent as given, with no merge. Not verified against a
-        controller: treat it as the same full replace as a single-port PUT and
-        pass every setting the ports should keep.
+        The body is sent as given, with no merge, so pass every setting the
+        ports should keep: a port PUT resets the fields it does not carry.
 
         Raises:
             ValueError: On no ids, an unknown field or an unaccepted
