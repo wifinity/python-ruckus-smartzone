@@ -183,9 +183,9 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
 - `GET /group/ids/byDomain/{domainId}` wraps its list in `{success, data}` and
   includes the domain's staging group (where unapproved switches land).
 - Group configuration history (`POST /configurationHistory/query/{groupId}`)
-  lists the whole history oldest first and ignores filters and sort fields;
-  the deployment tracker reads only its tail and tells new transactions apart
-  by id. Detail (`POST /configurationHistory/detail/query`, filter
+  lists the whole history in no time order and ignores filters and sort
+  fields; the deployment tracker snapshots every transaction id and tells new
+  ones apart by id. Detail (`POST /configurationHistory/detail/query`, filter
   `transactionId`) carries `clis` and `dispatchFailedReason[{lineNumber,
   message}]`; switch text is HTML-escaped.
 - A missing object is a 404 with `errorCode` 211. Request-schema errors are 422
@@ -194,6 +194,9 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
 - Flex-auth `authenticationType`: `802.1x`, `macauth`, `802.1x_and_macauth`
   only (no enum in the spec).
 - CLI template deletes use the list entry `id`, not `cliTemplateConfigId`.
+- Backup content (`GET /switchconfig/{id}`, `/switchconfig/download/{id}`) is
+  plain text even where the content type says JSON; `config_backups.content`
+  reads it through `SwitchManager.get_text`.
 
 ## 5) Conventions
 

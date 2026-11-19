@@ -8,7 +8,8 @@ configuration history. A 2xx does not mean the switch is configured.
 after it, waits until every new transaction for the tracked switches has
 finished. Transactions are recognised by id, not by time, so the caller's
 clock does not have to match the controller's. The controller lists group
-history oldest first, so only its tail is read.
+history in no time order, so a new transaction can appear anywhere in the
+list and every poll reads the whole group history.
 """
 
 import html
@@ -40,8 +41,8 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
-# Items per history page read while tailing the group history.
-HISTORY_PAGE_SIZE = 100
+# Items per history page; the API maximum, so most groups take one request.
+HISTORY_PAGE_SIZE = 1000
 
 SUCCESS_STATUSES = frozenset({"SUCCESS", "APPLIED"})
 FAILURE_STATUS = "FAILURE"
@@ -113,13 +114,9 @@ class DeploymentTracker:
             if switch_ids is not None
             else None
         )
-        first = self._page(1)
-        total = int(first.get("totalCount") or 0)
-        self._start_page = max(1, (total - 1) // HISTORY_PAGE_SIZE + 1)
-        start = first if self._start_page == 1 else self._page(self._start_page)
         self._known: Set[str] = {
             entry["transactionId"]
-            for entry in start.get("list") or []
+            for entry in self._history()
             if entry.get("transactionId")
         }
 
@@ -134,26 +131,22 @@ class DeploymentTracker:
     ) -> None:
         return None
 
-    def _page(self, page: int) -> Dict[str, Any]:
-        return self._switchm.config_history.page(self.group_id, page, HISTORY_PAGE_SIZE)
+    def _history(self) -> List[Dict[str, Any]]:
+        return self._switchm.config_history.query(
+            self.group_id, page_size=HISTORY_PAGE_SIZE
+        )
 
     def new_transactions(self) -> List[Dict[str, Any]]:
         """Return the tracked transactions that appeared after the snapshot."""
         found: List[Dict[str, Any]] = []
-        page = self._start_page
-        while True:
-            items = self._page(page).get("list") or []
-            for entry in items:
-                if entry.get("transactionId") in self._known:
-                    continue
-                if self.switch_ids is not None and not (
-                    _switch_ids(entry) & self.switch_ids
-                ):
-                    continue
-                found.append(entry)
-            if len(items) < HISTORY_PAGE_SIZE:
-                break
-            page += 1
+        for entry in self._history():
+            if entry.get("transactionId") in self._known:
+                continue
+            if self.switch_ids is not None and not (
+                _switch_ids(entry) & self.switch_ids
+            ):
+                continue
+            found.append(entry)
         return found
 
     def wait(
@@ -203,6 +196,7 @@ class DeploymentTracker:
                 entry.get("deployStatus") in SUCCESS_STATUSES for entry in found
             )
             if finished and now - changed_at >= settle:
+                found.sort(key=lambda entry: entry.get("startTime") or 0)
                 return [
                     {
                         "transaction": entry,

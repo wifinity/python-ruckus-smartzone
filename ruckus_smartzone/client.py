@@ -283,9 +283,36 @@ class SmartZoneClient:
         params: Optional[Dict[str, Any]] = None,
         json: Any = None,
         files: Any = None,
-        _auth_retry: bool = True,
     ) -> Optional[Dict[str, Any]]:
         """Send one request with ticket injection, refresh and backoff."""
+        return self._handle_response(
+            self._send(method, path, params=params, json=json, files=files)
+        )
+
+    def _request_text(
+        self, method: str, path: str, *, params: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """Send one request like :meth:`_request` and return the body as text.
+
+        For endpoints that answer with plain text (some declare a JSON content
+        type anyway).
+        """
+        response = self._send(method, path, params=params)
+        if response.status_code >= 400:
+            raise_for_response(response.status_code, _json_or_none(response))
+        return response.text
+
+    def _send(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+        json: Any = None,
+        files: Any = None,
+        _auth_retry: bool = True,
+    ) -> httpx.Response:
+        """Send one request and return the final response after retries."""
         request_params = dict(params or {})
         request_params[SERVICE_TICKET_PARAM] = self._tickets.get_ticket()
 
@@ -347,7 +374,7 @@ class SmartZoneClient:
                 _auth_retry = False
                 continue
 
-            return self._handle_response(response)
+            return response
 
     def _handle_response(self, response: httpx.Response) -> Optional[Dict[str, Any]]:
         """Return the JSON body, or raise the mapped error on a 4xx/5xx."""

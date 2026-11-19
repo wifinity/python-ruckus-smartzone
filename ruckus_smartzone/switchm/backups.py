@@ -37,9 +37,9 @@ class ConfigBackupsResource(SwitchmResource):
         params = None if master is None else {"master": str(master).lower()}
         return self.switchm.post("switchconfig/backup", params=params, json=ids)
 
-    def content(self, config_id: str) -> Optional[Dict[str, Any]]:
-        """Return a backup's content (the switch's running config as text)."""
-        return self.switchm.get(f"switchconfig/{config_id}")
+    def content(self, config_id: str) -> str:
+        """Return a backup's content: the switch's running config as text."""
+        return self.switchm.get_text(f"switchconfig/download/{config_id}")
 
     def delete(self, config_id: str) -> Optional[Dict[str, Any]]:
         """Delete one backup."""

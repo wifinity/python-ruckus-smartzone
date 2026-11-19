@@ -85,6 +85,10 @@ class SwitchManager:
         """Issue a GET and return the parsed JSON body."""
         return self._client._request("GET", self._url(path), params=params)
 
+    def get_text(self, path: str, *, params: Optional[Dict[str, Any]] = None) -> str:
+        """Issue a GET and return the body as text."""
+        return self._client._request_text("GET", self._url(path), params=params)
+
     def post(
         self,
         path: str,

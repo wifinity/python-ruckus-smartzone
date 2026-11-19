@@ -28,23 +28,14 @@ class ConfigHistoryResource(SwitchmResource):
         *,
         page_size: int = DEFAULT_PAGE_SIZE,
     ) -> List[Dict[str, Any]]:
-        """Return a group's history transactions, oldest first, every page.
+        """Return every transaction in a group's history.
 
-        The controller lists the whole group history in ``startTime`` order and
-        ignores filters and sort fields on this endpoint.
+        The controller lists the whole group history in no time order and
+        ignores filters and sort fields on this endpoint; sort on
+        ``startTime`` when order matters.
         """
         return self.switchm.query(
             f"configurationHistory/query/{group_id}", criteria, page_size=page_size
-        )
-
-    def page(self, group_id: str, page: int, limit: int) -> Dict[str, Any]:
-        """Return one raw page of a group's history (``{totalCount, list}``)."""
-        return (
-            self.switchm.post(
-                f"configurationHistory/query/{group_id}",
-                json={"page": page, "limit": limit},
-            )
-            or {}
         )
 
     def details(self, transaction_id: str) -> List[Dict[str, Any]]:

@@ -214,20 +214,32 @@ def test_ignores_other_switches(
     assert [r["transaction"]["transactionId"] for r in result] == ["t1"]
 
 
-def test_snapshot_reads_only_the_history_tail(
+def test_new_transaction_in_the_middle_of_history_is_found(
     respx_mock: respx.MockRouter, sz: SmartZoneClient, clock: FakeClock
 ) -> None:
-    old = [tx(f"o{i}", "SUCCESS") for i in range(deployments.HISTORY_PAGE_SIZE + 5)]
-    history = History(respx_mock, old)
+    history = History(respx_mock, [tx("a", "SUCCESS"), tx("b", "SUCCESS")])
     tracker = sz.switchm.deployments.track("g")
-    history.entries.append(tx("t1", "SUCCESS"))
+    history.entries.insert(1, tx("t1", "SUCCESS"))
 
     result = tracker.wait(settle=0)
 
     assert [r["transaction"]["transactionId"] for r in result] == ["t1"]
-    pages = [json.loads(c.request.content)["page"] for c in history.route.calls]
-    assert pages[:2] == [1, 2]
-    assert 1 not in pages[2:]
+
+
+def test_history_is_read_in_full_pages(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient, clock: FakeClock
+) -> None:
+    size = deployments.HISTORY_PAGE_SIZE
+    history = History(respx_mock, [tx(f"o{i}", "SUCCESS") for i in range(size + 5)])
+    tracker = sz.switchm.deployments.track("g")
+    history.entries.insert(3, tx("t1", "SUCCESS"))
+
+    result = tracker.wait(settle=0)
+
+    assert [r["transaction"]["transactionId"] for r in result] == ["t1"]
+    bodies = [json.loads(c.request.content) for c in history.route.calls]
+    assert {b["limit"] for b in bodies} == {size}
+    assert [b["page"] for b in bodies[:2]] == [1, 2]
 
 
 def test_run_returns_write_result_and_deployments(

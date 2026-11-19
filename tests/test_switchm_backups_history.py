@@ -5,6 +5,7 @@ import pytest
 import respx
 
 from ruckus_smartzone import SmartZoneClient
+from ruckus_smartzone.exceptions import SmartZoneNotFoundError
 from tests.switchm_support import MAC, SWITCHM, page, sent_json
 
 
@@ -41,8 +42,12 @@ def test_backup_sends_switch_list_and_master_flag(
 def test_backup_content_delete_and_alerts(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:
-    respx_mock.get(f"{SWITCHM}/switchconfig/b1").mock(
-        return_value=httpx.Response(200, json={"data": "ver 10.0.20"})
+    respx_mock.get(f"{SWITCHM}/switchconfig/download/b1").mock(
+        return_value=httpx.Response(
+            200,
+            text="ver 10.0.20\n!\n",
+            headers={"content-type": "application/json;charset=UTF-8"},
+        )
     )
     delete = respx_mock.delete(f"{SWITCHM}/switchconfig/b1").mock(
         return_value=httpx.Response(204)
@@ -54,14 +59,25 @@ def test_backup_content_delete_and_alerts(
         return_value=httpx.Response(200, json={"diff": ""})
     )
 
-    assert sz.switchm.config_backups.content("b1") == {"data": "ver 10.0.20"}
+    assert sz.switchm.config_backups.content("b1") == "ver 10.0.20\n!\n"
     sz.switchm.config_backups.delete("b1")
     assert sz.switchm.config_backups.master_alerts() == [{"switchId": MAC}]
     assert sz.switchm.config_backups.master_alert(MAC) == {"diff": ""}
     assert delete.called
 
 
-def test_history_query_page_and_details(
+def test_backup_content_error_is_mapped(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    respx_mock.get(f"{SWITCHM}/switchconfig/download/zz").mock(
+        return_value=httpx.Response(404, json={"errorCode": 211})
+    )
+
+    with pytest.raises(SmartZoneNotFoundError):
+        sz.switchm.config_backups.content("zz")
+
+
+def test_history_query_and_details(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:
     history = respx_mock.post(f"{SWITCHM}/configurationHistory/query/g").mock(
@@ -72,10 +88,9 @@ def test_history_query_page_and_details(
     )
 
     assert sz.switchm.config_history.query("g") == [{"transactionId": "t1"}]
-    assert sz.switchm.config_history.page("g", 3, 50)["totalCount"] == 1
     assert sz.switchm.config_history.details("t1")[0]["clis"] == "x"
 
-    assert sent_json(history, 1) == {"page": 3, "limit": 50}
+    assert sent_json(history) == {"page": 1, "limit": 100}
     assert sent_json(detail)["filters"] == [{"type": "transactionId", "value": "t1"}]
 
 

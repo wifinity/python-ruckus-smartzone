@@ -34,8 +34,8 @@ Facts read from a production `7.1.1.0.551` controller on 2026-11-18:
 - **Switch ids are MACs.** `POST /switch` has no serial filter; a full-text
   search on the serial finds it.
 - **Configuration history ignores filters and sort fields.** `POST
-  /configurationHistory/query/{groupId}` lists the group's whole history,
-  oldest first.
+  /configurationHistory/query/{groupId}` lists the group's whole history in
+  no time order: a new transaction can appear anywhere in the list.
 - **Error text is HTML-escaped** (`&quot;`, `&gt;`, `&#39;`).
 - **The served spec does not validate as-is.** One operation repeats a MIME
   type in `produces`, and another repeats the `serviceTicket` parameter.
@@ -113,9 +113,9 @@ Facts read from a production `7.1.1.0.551` controller on 2026-11-18:
 
 ### Deployment tracking is a first-class helper
 
-- `client.switchm.deployments.track(group_id, switch_ids)` snapshots the
-  transaction ids at the tail of the group history before a write.
-  `wait()` then polls the tail for new transactions on those switches. It
+- `client.switchm.deployments.track(group_id, switch_ids)` snapshots every
+  transaction id in the group history before a write. `wait()` then polls the
+  whole history (1000 per page) for new transactions on those switches. It
   returns once at least one appeared, all report `SUCCESS`, and none new
   arrived for a settle period (one write can start two transactions). New
   transactions are told apart by id, not by time, so the caller's clock need
@@ -169,3 +169,33 @@ without a wrapper.
   message text.
 - Nothing that identifies a controller, switch, MAC or serial is committed
   (ADR 0001 still applies).
+
+## Live verification
+
+Read paths, 2026-11-19, against a `7.1.1.0.551` controller and one
+ICX8200-48P on `10.0.20` in a dedicated test switch group. All 30 checks
+passed:
+
+- groups: list by domain (the staging group is listed), find by name, get
+- switches: find by serial, get, list by group
+- port details: 52 ports, LLDP neighbours on the uplink and an access port
+- port settings: list by switch (one per port), find by identifier, get
+- VLANs: by switch and by group, get, default VLAN
+- AAA servers and settings, DNS, switch authentication
+- flex-auth profiles by group and by query
+- CLI templates of both kinds
+- backups: list by switch, content, master-backup alerts
+- configuration history and transaction detail (including a failed one with
+  its line number and message)
+- jobs
+- a deployment tracker snapshot with no new transactions
+
+Two findings from this run changed the implementation:
+
+- Group configuration history is not in time order, so the tracker reads the
+  whole history rather than its tail.
+- Backup content is plain text served with a JSON content type, so it is
+  read as text.
+
+Write paths and the deployment waiter are covered by unit tests. They have
+not yet run against the controller.
