@@ -1,7 +1,7 @@
 # 0008. Switch Manager (switchm) spec and client surface
 
 Date: 2026-11-18
-Status: Proposed
+Status: Accepted
 
 ## Context
 
