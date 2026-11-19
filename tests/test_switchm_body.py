@@ -78,3 +78,12 @@ def test_merge_body_projects_current_and_applies_changes() -> None:
 def test_merge_body_refuses_unknown_change() -> None:
     with pytest.raises(ValueError):
         merge_body("portSettings_UpdatePortSettings", {}, {"switchId": "x"})
+
+
+def test_nested_none_is_pruned() -> None:
+    body = build_body(
+        "aaaSettings_AAASetting",
+        {"authentication": {"firstPref": "LOCAL", "secondPref": None}},
+    )
+
+    assert body == {"authentication": {"firstPref": "LOCAL"}}

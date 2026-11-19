@@ -50,6 +50,8 @@ def test_create_and_update_send_only_set_fields(
                 "name": "HN",
                 "igmpSnooping": "PASSIVE",
                 "ports": None,
+                "ipv4DhcpSnoopingTrustPort": "",
+                "arpInspectionTrustPort": "1/1/1",
             },
         )
     )
@@ -66,7 +68,11 @@ def test_create_and_update_send_only_set_fields(
         "name": "HN",
         "pushTimeType": "NOW",
     }
-    assert sent_json(update) == {"name": "HN-2", "igmpSnooping": "PASSIVE"}
+    assert sent_json(update) == {
+        "name": "HN-2",
+        "igmpSnooping": "PASSIVE",
+        "arpInspectionTrustPort": "1/1/1",
+    }
 
 
 def test_update_refuses_create_only_field(sz: SmartZoneClient) -> None:

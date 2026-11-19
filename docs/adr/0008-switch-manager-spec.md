@@ -146,9 +146,17 @@ per-resource `drop` keys and `unset` markers removed, and the caller's fields
 applied. This is the only way a GET body feeds a write, and only after that
 projection. Per resource:
 
+- Nested `None` values are removed everywhere, in the GET body and in the
+  caller's fields; the controller rejects them.
 - port settings: `pppoeIa` is dropped unless the caller sets it.
 - flex-auth profiles: `restrictedVlan`/`criticalVlan` of `0` count as unset,
   because the PUT refuses them unless the fail/timeout action uses them.
+- VLANs: trust ports of `""` count as unset (the PUT's port-list pattern
+  refuses them).
+- AAA servers: `username`/`password` of `""` count as unset. The GET never
+  returns `secret`, so `update()` requires it rather than clearing it.
+- CLI templates: `variables` of `[]` counts as unset. A provision config's GET
+  does not return `models`, so a provision `replace()` requires it.
 
 ### Scope of the first resource layer
 
@@ -238,7 +246,14 @@ Full-replace checks per PUT, on throwaway objects:
 | port settings | resets omitted fields (port disabled, PoE and LLDP off) | changed lines only |
 | switch authentication | refused: "Auth default vlan cannot be empty" | kept VLAN, no CLI |
 | flex-auth profile | refused: "Group Id cannot be empty" | kept other fields |
-| VLAN, AAA server | not testable in the test group | not tested |
+| VLAN | resets IGMP, DHCP snooping, STP mode and priority | kept them |
+| AAA server | refused: "[serverType] : must not be null" | kept other fields |
+| AAA settings | refused (nested nulls) | kept the other sections |
+| CLI template (provision) | refused: "GroupId cannot be empty" | kept name, group, models |
+
+VLAN, AAA and template checks ran in a throwaway empty switch group, created
+for the test and deleted after it. DNS create, update and delete also worked
+there.
 
 - A group in CLI config mode (any CLI template ever created in it) refuses
   VLAN and AAA server writes, group-level and switch-level, with "CLI mode is

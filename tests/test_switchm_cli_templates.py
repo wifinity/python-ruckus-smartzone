@@ -80,23 +80,72 @@ def test_create_update_needs_a_switch(sz: SmartZoneClient) -> None:
         sz.switchm.cli_templates.create_update("g", "n", "cli", [])
 
 
-def test_replace_validates_against_kind(
+def test_replace_merges_and_drops_empty_variables(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:
     respx_mock.get(f"{SWITCHM}/clitemplate/provision/c1").mock(
         return_value=httpx.Response(
-            200, json={"id": "c1", "name": "baseline", "cli": "x", "models": "M"}
+            200,
+            json={
+                "id": "c1",
+                "groupId": "g",
+                "name": "baseline",
+                "cli": "x",
+                "models": None,
+                "variables": [],
+                "overwrite": False,
+            },
         )
     )
     route = respx_mock.put(f"{SWITCHM}/clitemplate/provision/c1").mock(
         return_value=httpx.Response(204)
     )
 
-    sz.switchm.cli_templates.replace("provision", "c1", {"cli": "y"})
+    sz.switchm.cli_templates.replace(
+        "provision", "c1", {"cli": "y", "models": "ICX8200-48P"}
+    )
 
-    assert sent_json(route) == {"name": "baseline", "cli": "y", "models": "M"}
+    assert sent_json(route) == {
+        "groupId": "g",
+        "name": "baseline",
+        "cli": "y",
+        "models": "ICX8200-48P",
+        "overwrite": False,
+    }
+
+
+def test_provision_replace_needs_models(sz: SmartZoneClient) -> None:
+    with pytest.raises(ValueError, match="models"):
+        sz.switchm.cli_templates.replace("provision", "c1", {"cli": "y"})
+
+
+def test_replace_refuses_field_of_other_kind(sz: SmartZoneClient) -> None:
     with pytest.raises(ValueError):
-        sz.switchm.cli_templates.replace("provision", "c1", {"switches": "x"})
+        sz.switchm.cli_templates.replace(
+            "provision", "c1", {"switches": "x", "models": "M"}
+        )
+
+
+def test_update_kind_replace_needs_no_models(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    respx_mock.get(f"{SWITCHM}/clitemplate/update/c2").mock(
+        return_value=httpx.Response(
+            200, json={"groupId": "g", "name": "stp", "cli": "a", "switches": MAC}
+        )
+    )
+    route = respx_mock.put(f"{SWITCHM}/clitemplate/update/c2").mock(
+        return_value=httpx.Response(204)
+    )
+
+    sz.switchm.cli_templates.replace("update", "c2", {"cli": "b"})
+
+    assert sent_json(route) == {
+        "groupId": "g",
+        "name": "stp",
+        "cli": "b",
+        "switches": MAC,
+    }
 
 
 def test_delete_uses_list_entry_id(

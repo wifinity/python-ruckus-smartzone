@@ -4,6 +4,10 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from ruckus_smartzone.switchm.base import SwitchmResource, build_body
 
+# An AAA server GET reports unused login credentials as "", which the PUT's
+# length checks refuse.
+_SERVER_UNSET = {"username": "", "password": ""}
+
 
 class AAAServersResource(SwitchmResource):
     """Operations on a switch group's AAA (RADIUS/TACACS+) servers and settings."""
@@ -28,15 +32,26 @@ class AAAServersResource(SwitchmResource):
     def update(
         self, group_id: str, server_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Modify an AAA server from ``aaaServers_createAdminAAAServer`` fields.
+        """Change some fields of an AAA server, keeping the rest.
 
-        Reads the object and PUTs it back in full with ``fields`` applied
-        (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
+        Reads the server and PUTs it back in full with ``fields`` applied
+        (see :meth:`SwitchmResource.merge_put`). The controller never returns
+        the shared ``secret``, so it cannot be carried over: ``fields`` must
+        set it.
+
+        Raises:
+            ValueError: If ``fields`` has no ``secret``, or on an unknown field.
         """
+        if not fields.get("secret"):
+            raise ValueError(
+                "secret is required: the controller does not return it, so an "
+                "update without it would clear it"
+            )
         return self.merge_put(
             f"group/{group_id}/aaaServers/{server_id}",
             "aaaServers_createAdminAAAServer",
             fields,
+            unset=_SERVER_UNSET,
         )
 
     def delete(self, group_id: str, server_id: str) -> Optional[Dict[str, Any]]:

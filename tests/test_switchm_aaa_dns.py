@@ -26,7 +26,14 @@ def test_aaa_create_update_delete(
     create = respx_mock.post(AAA).mock(return_value=httpx.Response(204))
     respx_mock.get(f"{AAA}/a1").mock(
         return_value=httpx.Response(
-            200, json={"id": "a1", "name": "radius-1", "authPort": 1812}
+            200,
+            json={
+                "id": "a1",
+                "name": "radius-1",
+                "authPort": 1812,
+                "username": "",
+                "secret": None,
+            },
         )
     )
     update = respx_mock.put(f"{AAA}/a1").mock(return_value=httpx.Response(204))
@@ -60,21 +67,26 @@ def test_aaa_refuses_unknown_field(sz: SmartZoneClient) -> None:
 def test_aaa_settings(respx_mock: respx.MockRouter, sz: SmartZoneClient) -> None:
     respx_mock.get(f"{SWITCHM}/group/g/aaaSettings").mock(
         return_value=httpx.Response(
-            200, json={"authentication": {}, "accounting": {"x": 1}, "altoId": None}
+            200,
+            json={
+                "authentication": {"firstPref": "LOCAL", "secondPref": None},
+                "accounting": {"x": 1, "exec": None},
+                "altoId": None,
+            },
         )
     )
     put = respx_mock.put(f"{SWITCHM}/group/g/aaaSettings").mock(
         return_value=httpx.Response(204)
     )
 
-    assert sz.switchm.aaa_servers.get_settings("g")["authentication"] == {}
-    sz.switchm.aaa_servers.update_settings(
-        "g", {"authentication": {"firstPref": "RADIUS"}}
-    )
+    settings = sz.switchm.aaa_servers.get_settings("g")
+    assert settings["authentication"]["firstPref"] == "LOCAL"
+    sz.switchm.aaa_servers.update_settings("g", {"authorization": {"y": True}})
 
     assert sent_json(put) == {
-        "authentication": {"firstPref": "RADIUS"},
+        "authentication": {"firstPref": "LOCAL"},
         "accounting": {"x": 1},
+        "authorization": {"y": True},
     }
 
 
@@ -100,3 +112,13 @@ def test_dns(respx_mock: respx.MockRouter, sz: SmartZoneClient) -> None:
     assert get.called and delete.called
     assert sent_json(create) == {"id": "g", "dns": {"ip": "192.0.2.53"}}
     assert sent_json(update) == {"dns": {"ip": "192.0.2.54"}}
+
+
+def test_aaa_update_requires_secret(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    get = respx_mock.get(f"{AAA}/a1")
+
+    with pytest.raises(ValueError, match="secret"):
+        sz.switchm.aaa_servers.update("g", "a1", {"acctPort": 1646})
+    assert not get.called

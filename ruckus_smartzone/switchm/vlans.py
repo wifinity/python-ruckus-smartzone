@@ -9,6 +9,10 @@ from ruckus_smartzone.const import DEFAULT_PAGE_SIZE
 from ruckus_smartzone.mac import normalize_mac
 from ruckus_smartzone.switchm.base import SwitchmResource, build_body, switch_filter
 
+# A VLAN GET reports unset trust ports as "", which the PUT's port-list
+# pattern refuses.
+_VLAN_UNSET = {"ipv4DhcpSnoopingTrustPort": "", "arpInspectionTrustPort": ""}
+
 
 class VLANsResource(SwitchmResource):
     """Operations on VLAN configs."""
@@ -58,7 +62,10 @@ class VLANsResource(SwitchmResource):
         (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
         """
         return self.merge_put(
-            f"vlans/{vlan_config_id}", "vlanConfig_updateVlanConfig", fields
+            f"vlans/{vlan_config_id}",
+            "vlanConfig_updateVlanConfig",
+            fields,
+            unset=_VLAN_UNSET,
         )
 
     def delete(self, vlan_config_id: str) -> Optional[Dict[str, Any]]:

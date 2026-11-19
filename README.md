@@ -348,8 +348,11 @@ arrays give 422, firmware-gated objects such as `pppoeIa` give 500).
 objects, and its PUTs are full replaces: a field left out of the body is reset
 (an omitted `portEnabled` disables a port) or refused as empty. Every `update()`
 reads the object, keeps its writable fields, applies your changes and PUTs the
-full body, so you still pass only what changes. `port_settings.bulk_update()`
-sends its body as given: pass every setting the ports should keep.
+full body, so you still pass only what changes. Two exceptions: the
+controller never returns an AAA server's `secret`, so `aaa_servers.update()`
+requires it, and a provision template's GET has no `models`, so a provision
+`cli_templates.replace()` requires them. `port_settings.bulk_update()` sends
+its body as given: pass every setting the ports should keep.
 
 **CLI config mode.** Once any CLI template has been created in a switch group,
 the group stays in CLI config mode and the controller refuses VLAN and AAA

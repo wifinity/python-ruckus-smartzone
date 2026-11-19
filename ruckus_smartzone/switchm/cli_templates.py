@@ -118,13 +118,25 @@ class CLITemplatesResource(SwitchmResource):
     ) -> Optional[Dict[str, Any]]:
         """Change some fields of a template config, keeping the rest.
 
-        Reads the object and PUTs it back in full with ``fields`` applied
-        (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
+        Reads the config and PUTs it back in full with ``fields`` applied
+        (see :meth:`SwitchmResource.merge_put`). A provision config's GET does
+        not return its ``models`` (the list entry's ``searchModels`` holds
+        them), so a provision replace must set ``models``.
+
+        Raises:
+            ValueError: On a provision replace without ``models``, or on an
+                unknown field.
         """
+        if _kind(kind) == "provision" and not fields.get("models"):
+            raise ValueError(
+                "models is required: the controller does not return it for a "
+                "provision template"
+            )
         return self.merge_put(
-            f"clitemplate/{_kind(kind)}/{cli_template_config_id}",
+            f"clitemplate/{kind}/{cli_template_config_id}",
             _DEFINITIONS[kind],
             fields,
+            unset={"variables": []},
         )
 
     def delete(self, kind: str, template_id: str) -> Optional[Dict[str, Any]]:

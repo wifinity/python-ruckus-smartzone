@@ -22,8 +22,17 @@ if TYPE_CHECKING:
 AUTHENTICATION_TYPES = ("802.1x", "macauth", "802.1x_and_macauth")
 
 
+def _prune_none(value: Any) -> Any:
+    """Return ``value`` with ``None`` entries removed from nested dicts."""
+    if isinstance(value, dict):
+        return {k: _prune_none(v) for k, v in value.items() if v is not None}
+    return value
+
+
 def build_body(definition: str, fields: Mapping[str, Any]) -> Dict[str, Any]:
     """Return a write body holding only the caller's non-``None`` fields.
+
+    ``None`` inside nested objects is removed too; the controller rejects it.
 
     Args:
         definition: Request-body definition name in the Switch Manager spec,
@@ -39,7 +48,9 @@ def build_body(definition: str, fields: Mapping[str, Any]) -> Dict[str, Any]:
     unknown = sorted(key for key in fields if key not in allowed)
     if unknown:
         raise ValueError(f"{definition} has no field(s) {unknown}")
-    return {key: value for key, value in fields.items() if value is not None}
+    return {
+        key: _prune_none(value) for key, value in fields.items() if value is not None
+    }
 
 
 def merge_body(
@@ -54,9 +65,10 @@ def merge_body(
 
     For full-replace PUTs, where a field left out of the body is reset. The
     current object (a GET body) is cut down to the properties of
-    ``definition``; its ``None`` values, the ``drop`` keys, and any key whose
-    value equals its ``unset`` marker (a GET reporting "not set" as ``0``) are
-    removed; the caller's non-``None`` fields are applied on top.
+    ``definition``; its ``None`` values (nested ones too, which the controller
+    rejects), the ``drop`` keys, and any key whose value equals its ``unset``
+    marker (a GET reporting "not set" as ``0``, ``""`` or ``[]``) are removed;
+    the caller's non-``None`` fields are applied on top.
 
     Raises:
         ValueError: If a caller field is not a property of ``definition``.
@@ -66,7 +78,7 @@ def merge_body(
     skipped = set(drop)
     markers = unset or {}
     body = {
-        key: value
+        key: _prune_none(value)
         for key, value in current.items()
         if key in allowed
         and key not in skipped
