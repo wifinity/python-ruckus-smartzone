@@ -39,6 +39,7 @@ from ruckus_smartzone.resources import (
     WLANGroupsResource,
     WLANsResource,
     ZonesResource,
+    ZoneSwitchGroupLinksResource,
 )
 from ruckus_smartzone.switchm import SwitchManager, switchm_base_url
 from ruckus_smartzone.ticket_cache import InMemoryTicketCache, TicketCache
@@ -143,6 +144,7 @@ class SmartZoneClient:
         self.firewall_profiles = FirewallProfilesResource(self)
         self.precedence_profiles = PrecedenceProfilesResource(self)
         self.dpsk = DPSKResource(self)
+        self.zone_switch_group_links = ZoneSwitchGroupLinksResource(self)
         self.switchm = SwitchManager(self, switchm_base_url(str(self._http.base_url)))
 
     @property

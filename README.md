@@ -369,6 +369,32 @@ with no reload. Delete a template by its list entry `id`, not its
 talking to SmartZone until its manager is re-enabled on the switch or it is
 factory-reset.
 
+**Linking a switch group to a zone.** The link between a switch group and a
+zone is a public-API record (`/zoneSwitchGroupLinks`), reached as
+`client.zone_switch_group_links` rather than through `client.switchm`. A link
+record is `{id, zoneId, switchGroupId, link}`.
+
+```python
+zone = client.zones.find_by_name("SITE01")
+group = client.switchm.groups.find_by_name(zone["domainId"], "SITE01")
+
+links = client.zone_switch_group_links
+existing = links.find(zone["id"], group["id"])        # the record, or None
+if existing is None:
+    links.create(zone["id"], group["id"])             # link=True; returns {id}
+elif not existing["link"]:
+    links.update(existing["id"], {"link": True})      # read-merge-PUT
+
+links.list(zone_id=zone["id"])                        # also switch_group_id=, domain_id=
+links.get(existing["id"])
+links.delete(existing["id"])
+```
+
+`find` matches on both ids whatever the record's `link` flag, and raises
+`ValueError` if more than one record joins the pair. `update` takes any of
+`zoneId`, `switchGroupId` and `link`, and PUTs them merged over the current
+record.
+
 ### Error handling
 
 ```python
@@ -459,5 +485,5 @@ make format   # apply black formatting
 ## Scope
 
 Zones, WLANs, WLAN groups and their members, access points, AP groups and
-their members, firewall and precedence profiles, DPSK keys, and ICX switches
-through the Switch Manager API.
+their members, firewall and precedence profiles, DPSK keys, ICX switches
+through the Switch Manager API, and zone-to-switch-group links.

@@ -12,6 +12,7 @@
 - [adr/0006-firewall-and-precedence-profiles.md](adr/0006-firewall-and-precedence-profiles.md) — firewall/precedence profile read layer; global scope, name→id resolution
 - [adr/0007-dpsk-keys.md](adr/0007-dpsk-keys.md) — WLAN DPSK key layer; create via batchGenUnbound, delete via POST idList, multipart upload
 - [adr/0008-switch-manager-spec.md](adr/0008-switch-manager-spec.md) — Switch Manager (switchm) second spec, shared ticket, read-merge-PUT updates, deployment tracking
+- [adr/0009-zone-switch-group-links.md](adr/0009-zone-switch-group-links.md) — zone-to-switch-group link layer; public-API record, find by id pair, read-merge-PUT update
 
 ## Repository root
 
