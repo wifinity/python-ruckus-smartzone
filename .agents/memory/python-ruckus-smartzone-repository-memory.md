@@ -91,6 +91,8 @@ In place:
   (record or `None`), `create(zone_id, switch_group_id, link=True)`,
   `update(id, fields)` (read-merge-PUT over `zoneId`/`switchGroupId`/`link`)
   and `delete`. The link is a public-API (`wsg`) record, not a switchm one.
+  The list takes at most one filter (two give HTTP 500, "At most 1
+  parameter"), so `find` filters by zone and matches the group client-side.
   See ADR 0009.
 
 Live verification of the AP-group layer is complete (physical test AP, `v13_1`
