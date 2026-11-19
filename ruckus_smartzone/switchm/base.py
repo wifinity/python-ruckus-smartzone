@@ -7,7 +7,7 @@ and checked against the generated request schema, so a GET body is never sent
 back as a write.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Optional, Union
 
 from ruckus_smartzone.exceptions import SmartZoneNotFoundError
 from ruckus_smartzone.generated.models import SWITCHM_SCHEMA_INDEX
@@ -48,13 +48,15 @@ def merge_body(
     fields: Mapping[str, Any],
     *,
     drop: Iterable[str] = (),
+    unset: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return a full write body: the current object with the caller's changes.
 
     For full-replace PUTs, where a field left out of the body is reset. The
     current object (a GET body) is cut down to the properties of
-    ``definition``, its ``None`` values and the ``drop`` keys are removed, and
-    the caller's non-``None`` fields are applied on top.
+    ``definition``; its ``None`` values, the ``drop`` keys, and any key whose
+    value equals its ``unset`` marker (a GET reporting "not set" as ``0``) are
+    removed; the caller's non-``None`` fields are applied on top.
 
     Raises:
         ValueError: If a caller field is not a property of ``definition``.
@@ -62,10 +64,14 @@ def merge_body(
     changes = build_body(definition, fields)
     allowed = SWITCHM_SCHEMA_INDEX[definition].get("properties") or {}
     skipped = set(drop)
+    markers = unset or {}
     body = {
         key: value
         for key, value in current.items()
-        if key in allowed and key not in skipped and value is not None
+        if key in allowed
+        and key not in skipped
+        and value is not None
+        and not (key in markers and value == markers[key])
     }
     body.update(changes)
     return body
@@ -132,3 +138,29 @@ class SwitchmResource:
             switchm: The owning :class:`SwitchManager`.
         """
         self.switchm = switchm
+
+    def merge_put(
+        self,
+        path: str,
+        definition: str,
+        fields: Mapping[str, Any],
+        *,
+        drop: Iterable[str] = (),
+        unset: Optional[Mapping[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Change some fields of the object at ``path``, keeping the rest.
+
+        Switch Manager has no PATCH for config objects, and its PUTs reset any
+        field the body leaves out. This GETs the object, builds the full body
+        with :func:`merge_body` and PUTs it to the same path. The controller
+        diffs against its own database, so re-sent unchanged values generate
+        no switch CLI.
+
+        Raises:
+            ValueError: If a field is not a property of ``definition``; raised
+                before any request.
+        """
+        build_body(definition, fields)
+        current = self.switchm.get(path) or {}
+        body = merge_body(definition, current, fields, drop=drop, unset=unset)
+        return self.switchm.put(path, json=body)

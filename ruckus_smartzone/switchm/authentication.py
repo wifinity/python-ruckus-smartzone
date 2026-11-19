@@ -27,17 +27,19 @@ class SwitchAuthenticationResource(SwitchmResource):
         self,
         switch_id: str,
         *,
-        enabled: bool,
+        enabled: Optional[bool] = None,
         default_vlan: Optional[int] = None,
         guest_vlan: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Set a switch's authentication settings.
+        """Change a switch's authentication settings, keeping those not given.
 
         Enabling it pushes ``authentication``, ``auth-default-vlan`` and
         ``aaa authentication dot1x default radius`` to the switch. The default
-        VLAN does not have to exist first.
+        VLAN does not have to exist first. The settings are read and PUT back
+        in full (see :meth:`SwitchmResource.merge_put`).
         """
-        body = build_body(
+        return self.merge_put(
+            f"authentication/{normalize_mac(switch_id)}",
             "authentication_UpdateAuthentication",
             {
                 "authEnable": enabled,
@@ -45,7 +47,11 @@ class SwitchAuthenticationResource(SwitchmResource):
                 "guestVlan": guest_vlan,
             },
         )
-        return self.switchm.put(f"authentication/{normalize_mac(switch_id)}", json=body)
+
+
+# A profile GET reports an unused restricted or critical VLAN as 0, and the PUT
+# refuses either VLAN unless the matching fail/timeout action uses it.
+_PROFILE_UNSET = {"restrictedVlan": 0, "criticalVlan": 0}
 
 
 class FlexAuthProfilesResource(SwitchmResource):
@@ -91,20 +97,19 @@ class FlexAuthProfilesResource(SwitchmResource):
     ) -> Optional[Dict[str, Any]]:
         """Update a profile from ``..._UpdateFlexibleAuthenticationProfile`` fields.
 
-        A Switch Manager PUT can reset fields it does not carry (proven for
-        port settings), so pass every field the object should keep.
+        Reads the profile and PUTs it back in full with ``fields`` applied
+        (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
 
         Raises:
             ValueError: On an unknown field or an unaccepted
                 ``authenticationType``.
         """
         check_authentication_type(fields)
-        return self.switchm.put(
+        return self.merge_put(
             f"flexibleAuthenticationProfile/{profile_id}",
-            json=build_body(
-                "flexibleAuthenticationProfile_UpdateFlexibleAuthenticationProfile",
-                fields,
-            ),
+            "flexibleAuthenticationProfile_UpdateFlexibleAuthenticationProfile",
+            fields,
+            unset=_PROFILE_UNSET,
         )
 
     def delete(self, profile_id: str) -> Optional[Dict[str, Any]]:

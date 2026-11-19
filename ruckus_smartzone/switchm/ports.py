@@ -17,7 +17,6 @@ from ruckus_smartzone.switchm.base import (
     SwitchmResource,
     build_body,
     check_authentication_type,
-    merge_body,
     single,
     switch_filter,
 )
@@ -75,14 +74,12 @@ class PortSettingsResource(SwitchmResource):
                 ``authenticationType``.
         """
         check_authentication_type(fields)
-        current = self.get(port_settings_id) or {}
-        body = merge_body(
+        return self.merge_put(
+            f"portSettings/{port_settings_id}",
             "portSettings_UpdatePortSettings",
-            current,
             fields,
             drop=[key for key in _FIRMWARE_GATED if key not in fields],
         )
-        return self.switchm.put(f"portSettings/{port_settings_id}", json=body)
 
     def bulk_update(
         self, port_settings_ids: Iterable[str], fields: Mapping[str, Any]

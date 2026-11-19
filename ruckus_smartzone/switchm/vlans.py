@@ -42,23 +42,23 @@ class VLANsResource(SwitchmResource):
         """Create a VLAN config from ``vlanConfig_createVlanConfig`` fields.
 
         Set ``groupId`` for a group VLAN or ``switchId`` for a switch VLAN,
-        plus ``vlanId`` and ``name``.
+        plus ``vlanId`` and ``name``. ``pushTimeType`` is required by the
+        controller and defaults to ``NOW``.
         """
-        return self.switchm.post(
-            "vlans", json=build_body("vlanConfig_createVlanConfig", fields)
-        )
+        body = build_body("vlanConfig_createVlanConfig", fields)
+        body.setdefault("pushTimeType", "NOW")
+        return self.switchm.post("vlans", json=body)
 
     def update(
         self, vlan_config_id: str, fields: Mapping[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Update a VLAN config from ``vlanConfig_updateVlanConfig`` fields.
 
-        A Switch Manager PUT can reset fields it does not carry (proven for
-        port settings), so pass every field the object should keep.
+        Reads the object and PUTs it back in full with ``fields`` applied
+        (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
         """
-        return self.switchm.put(
-            f"vlans/{vlan_config_id}",
-            json=build_body("vlanConfig_updateVlanConfig", fields),
+        return self.merge_put(
+            f"vlans/{vlan_config_id}", "vlanConfig_updateVlanConfig", fields
         )
 
     def delete(self, vlan_config_id: str) -> Optional[Dict[str, Any]]:

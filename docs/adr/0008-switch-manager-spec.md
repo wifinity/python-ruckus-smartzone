@@ -136,12 +136,19 @@ body fails that check (it carries read-only keys such as `id`), so it is never
 sent back as a PUT. `authenticationType` is checked against the three accepted
 values before any request.
 
-`PUT /portSettings/{id}` is a full replace: a field the body leaves out is
-reset (found live, see below). `port_settings.update()` therefore reads the
-port and sends `merge_body()`: the GET body cut down to the update schema's
-properties, nulls and `pppoeIa` removed (unless the caller sets it), with the
-caller's fields applied. This is the one place a GET body feeds a write, and
-only after that projection.
+Switch Manager has no PATCH for config objects (only `PATCH /group/{id}`
+for name and description, and `PATCH /firmware/{version}`), and its PUTs are
+full replaces: a field the body leaves out is reset or refused as empty (found
+live, see below). Every update wrapper therefore uses
+`SwitchmResource.merge_put()`, which GETs the object and PUTs `merge_body()`:
+the GET body cut down to the update schema's properties, with nulls,
+per-resource `drop` keys and `unset` markers removed, and the caller's fields
+applied. This is the only way a GET body feeds a write, and only after that
+projection. Per resource:
+
+- port settings: `pppoeIa` is dropped unless the caller sets it.
+- flex-auth profiles: `restrictedVlan`/`criticalVlan` of `0` count as unset,
+  because the PUT refuses them unless the fail/timeout action uses them.
 
 ### Scope of the first resource layer
 
@@ -223,3 +230,19 @@ Write paths, the same day, on the test switch only:
   template deployed (32 s).
 - `cli_templates.delete()` by list entry `id` removed all three test
   templates.
+
+Full-replace checks per PUT, on throwaway objects:
+
+| PUT | Partial body | Merged `update()` |
+|-----|--------------|-------------------|
+| port settings | resets omitted fields (port disabled, PoE and LLDP off) | changed lines only |
+| switch authentication | refused: "Auth default vlan cannot be empty" | kept VLAN, no CLI |
+| flex-auth profile | refused: "Group Id cannot be empty" | kept other fields |
+| VLAN, AAA server | not testable in the test group | not tested |
+
+- A group in CLI config mode (any CLI template ever created in it) refuses
+  VLAN and AAA server writes, group-level and switch-level, with "CLI mode is
+  enabled. Please do not modify the configuration". Port settings and switch
+  authentication still work there.
+- `POST /vlans` requires `pushTimeType`; `vlans.create()` defaults it to
+  `NOW`.

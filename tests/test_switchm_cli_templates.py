@@ -83,13 +83,18 @@ def test_create_update_needs_a_switch(sz: SmartZoneClient) -> None:
 def test_replace_validates_against_kind(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:
+    respx_mock.get(f"{SWITCHM}/clitemplate/provision/c1").mock(
+        return_value=httpx.Response(
+            200, json={"id": "c1", "name": "baseline", "cli": "x", "models": "M"}
+        )
+    )
     route = respx_mock.put(f"{SWITCHM}/clitemplate/provision/c1").mock(
         return_value=httpx.Response(204)
     )
 
-    sz.switchm.cli_templates.replace("provision", "c1", {"cli": "y", "models": "M"})
+    sz.switchm.cli_templates.replace("provision", "c1", {"cli": "y"})
 
-    assert sent_json(route) == {"cli": "y", "models": "M"}
+    assert sent_json(route) == {"name": "baseline", "cli": "y", "models": "M"}
     with pytest.raises(ValueError):
         sz.switchm.cli_templates.replace("provision", "c1", {"switches": "x"})
 

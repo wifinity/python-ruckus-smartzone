@@ -30,12 +30,13 @@ class AAAServersResource(SwitchmResource):
     ) -> Optional[Dict[str, Any]]:
         """Modify an AAA server from ``aaaServers_createAdminAAAServer`` fields.
 
-        A Switch Manager PUT can reset fields it does not carry (proven for
-        port settings), so pass every field the object should keep.
+        Reads the object and PUTs it back in full with ``fields`` applied
+        (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
         """
-        return self.switchm.put(
+        return self.merge_put(
             f"group/{group_id}/aaaServers/{server_id}",
-            json=build_body("aaaServers_createAdminAAAServer", fields),
+            "aaaServers_createAdminAAAServer",
+            fields,
         )
 
     def delete(self, group_id: str, server_id: str) -> Optional[Dict[str, Any]]:
@@ -60,10 +61,9 @@ class AAAServersResource(SwitchmResource):
     ) -> Optional[Dict[str, Any]]:
         """Modify a group's AAA settings from ``aaaSettings_AAASetting`` fields.
 
-        A Switch Manager PUT can reset fields it does not carry (proven for
-        port settings), so pass every field the object should keep.
+        Reads the object and PUTs it back in full with ``fields`` applied
+        (see :meth:`SwitchmResource.merge_put`), so pass only what changes.
         """
-        return self.switchm.put(
-            f"group/{group_id}/aaaSettings",
-            json=build_body("aaaSettings_AAASetting", fields),
+        return self.merge_put(
+            f"group/{group_id}/aaaSettings", "aaaSettings_AAASetting", fields
         )

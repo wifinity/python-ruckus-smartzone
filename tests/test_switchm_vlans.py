@@ -40,6 +40,19 @@ def test_create_and_update_send_only_set_fields(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:
     create = respx_mock.post(f"{SWITCHM}/vlans").mock(return_value=httpx.Response(204))
+    respx_mock.get(f"{SWITCHM}/vlans/v1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "v1",
+                "vlanId": 91,
+                "groupId": "g",
+                "name": "HN",
+                "igmpSnooping": "PASSIVE",
+                "ports": None,
+            },
+        )
+    )
     update = respx_mock.put(f"{SWITCHM}/vlans/v1").mock(
         return_value=httpx.Response(200, json={})
     )
@@ -47,8 +60,13 @@ def test_create_and_update_send_only_set_fields(
     sz.switchm.vlans.create({"groupId": "g", "vlanId": 91, "name": "HN", "ports": None})
     sz.switchm.vlans.update("v1", {"name": "HN-2"})
 
-    assert sent_json(create) == {"groupId": "g", "vlanId": 91, "name": "HN"}
-    assert sent_json(update) == {"name": "HN-2"}
+    assert sent_json(create) == {
+        "groupId": "g",
+        "vlanId": 91,
+        "name": "HN",
+        "pushTimeType": "NOW",
+    }
+    assert sent_json(update) == {"name": "HN-2", "igmpSnooping": "PASSIVE"}
 
 
 def test_update_refuses_create_only_field(sz: SmartZoneClient) -> None:
@@ -71,3 +89,13 @@ def test_delete_and_delete_many(
     assert one.called
     assert many.call_count == 1
     assert sent_json(many) == {"idList": ["v1", "v2"]}
+
+
+def test_create_keeps_caller_push_time_type(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    create = respx_mock.post(f"{SWITCHM}/vlans").mock(return_value=httpx.Response(204))
+
+    sz.switchm.vlans.create({"groupId": "g", "vlanId": 91, "pushTimeType": "SCHEDULE"})
+
+    assert sent_json(create)["pushTimeType"] == "SCHEDULE"

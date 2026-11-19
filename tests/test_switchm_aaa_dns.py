@@ -24,6 +24,11 @@ def test_aaa_create_update_delete(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:
     create = respx_mock.post(AAA).mock(return_value=httpx.Response(204))
+    respx_mock.get(f"{AAA}/a1").mock(
+        return_value=httpx.Response(
+            200, json={"id": "a1", "name": "radius-1", "authPort": 1812}
+        )
+    )
     update = respx_mock.put(f"{AAA}/a1").mock(return_value=httpx.Response(204))
     delete = respx_mock.delete(f"{AAA}/a1").mock(return_value=httpx.Response(204))
     bulk = respx_mock.delete(AAA).mock(return_value=httpx.Response(204))
@@ -42,7 +47,7 @@ def test_aaa_create_update_delete(
     assert sz.switchm.aaa_servers.delete_many("g", []) is None
 
     assert sent_json(create) == fields
-    assert sent_json(update) == {"secret": "t"}
+    assert sent_json(update) == {"name": "radius-1", "authPort": 1812, "secret": "t"}
     assert delete.called
     assert bulk.call_count == 1 and sent_json(bulk) == {"idList": ["a1"]}
 
@@ -54,18 +59,23 @@ def test_aaa_refuses_unknown_field(sz: SmartZoneClient) -> None:
 
 def test_aaa_settings(respx_mock: respx.MockRouter, sz: SmartZoneClient) -> None:
     respx_mock.get(f"{SWITCHM}/group/g/aaaSettings").mock(
-        return_value=httpx.Response(200, json={"authentication": {}})
+        return_value=httpx.Response(
+            200, json={"authentication": {}, "accounting": {"x": 1}, "altoId": None}
+        )
     )
     put = respx_mock.put(f"{SWITCHM}/group/g/aaaSettings").mock(
         return_value=httpx.Response(204)
     )
 
-    assert sz.switchm.aaa_servers.get_settings("g") == {"authentication": {}}
+    assert sz.switchm.aaa_servers.get_settings("g")["authentication"] == {}
     sz.switchm.aaa_servers.update_settings(
         "g", {"authentication": {"firstPref": "RADIUS"}}
     )
 
-    assert sent_json(put) == {"authentication": {"firstPref": "RADIUS"}}
+    assert sent_json(put) == {
+        "authentication": {"firstPref": "RADIUS"},
+        "accounting": {"x": 1},
+    }
 
 
 def test_dns(respx_mock: respx.MockRouter, sz: SmartZoneClient) -> None:
