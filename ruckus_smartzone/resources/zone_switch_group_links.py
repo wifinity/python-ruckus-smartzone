@@ -5,6 +5,11 @@ A Switch Manager switch group is tied to a public-API zone by a link record
 ``/zoneSwitchGroupLinks`` collection, not in Switch Manager. Zone ids come from
 ``client.zones`` and switch group ids from ``client.switchm.groups``.
 
+The list endpoint accepts at most one of its ``zoneId``, ``switchGroupId`` and
+``domainId`` filters; the controller answers two or more with HTTP 500. A
+``switchGroupId`` filter naming an unknown group also gets HTTP 500, while an
+unknown ``zoneId`` gets an empty list.
+
 ``PUT`` takes the full ``{zoneId, switchGroupId, link}`` body, so :meth:`update`
 reads the record, overlays the given fields and writes the merged body back.
 """
@@ -28,7 +33,11 @@ class ZoneSwitchGroupLinksResource(BaseResource):
         switch_group_id: Optional[str] = None,
         domain_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Return every link matching the given filters, following pagination."""
+        """Return every link matching the given filter, following pagination.
+
+        Raises:
+            ValueError: If more than one filter is given.
+        """
         params = {
             key: value
             for key, value in (
@@ -38,6 +47,10 @@ class ZoneSwitchGroupLinksResource(BaseResource):
             )
             if value is not None
         }
+        if len(params) > 1:
+            raise ValueError(
+                "Filter by at most one of zone_id, switch_group_id and domain_id"
+            )
         return self.client.paginate(_PATH, params=params or None)
 
     def get(self, link_id: str) -> Optional[Dict[str, Any]]:
@@ -47,14 +60,15 @@ class ZoneSwitchGroupLinksResource(BaseResource):
     def find(self, zone_id: str, switch_group_id: str) -> Optional[Dict[str, Any]]:
         """Return the link between a zone and a switch group, or ``None``.
 
-        The returned record is matched on both ids, whatever its ``link`` flag.
+        Links are listed by zone and matched on the switch group client-side.
+        The record is returned whatever its ``link`` flag.
 
         Raises:
             ValueError: If more than one link joins the pair.
         """
         matches = [
             item
-            for item in self.list(zone_id=zone_id, switch_group_id=switch_group_id)
+            for item in self.list(zone_id=zone_id)
             if item.get("zoneId") == zone_id
             and item.get("switchGroupId") == switch_group_id
         ]

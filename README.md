@@ -385,13 +385,16 @@ if existing is None:
 elif not existing["link"]:
     links.update(existing["id"], {"link": True})      # read-merge-PUT
 
-links.list(zone_id=zone["id"])                        # also switch_group_id=, domain_id=
+links.list(zone_id=zone["id"])                        # or switch_group_id= or domain_id=
 links.get(existing["id"])
 links.delete(existing["id"])
 ```
 
-`find` matches on both ids whatever the record's `link` flag, and raises
-`ValueError` if more than one record joins the pair. `update` takes any of
+`list` takes at most one filter: the controller answers two with HTTP 500, so
+the client raises `ValueError` first. A `switch_group_id` filter naming an
+unknown group also gets HTTP 500. `find` lists by zone and matches the group
+itself, returning the record whatever its `link` flag; it raises `ValueError`
+if more than one record joins the pair. `update` takes any of
 `zoneId`, `switchGroupId` and `link`, and PUTs them merged over the current
 record.
 

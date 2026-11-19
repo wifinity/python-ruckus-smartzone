@@ -41,13 +41,12 @@ def test_list_sends_only_given_filters(
     route = respx_mock.get(LINKS).mock(return_value=page(record()))
 
     with SmartZoneClient(controller_url, "admin", "pw") as client:
-        links = client.zone_switch_group_links.list(zone_id=ZONE, domain_id="d1")
+        links = client.zone_switch_group_links.list(domain_id="d1")
 
     assert links == [record()]
     params = route.calls.last.request.url.params
-    assert params["zoneId"] == ZONE
     assert params["domainId"] == "d1"
-    assert "switchGroupId" not in params
+    assert not {"zoneId", "switchGroupId"} & set(params)
     assert params["index"] == "0"
 
 
@@ -104,7 +103,30 @@ def test_find_filters_by_both_ids_and_returns_the_match(
     assert link == record(ZONE)
     params = route.calls.last.request.url.params
     assert params["zoneId"] == ZONE
-    assert params["switchGroupId"] == GROUP
+    assert "switchGroupId" not in params
+
+
+def test_find_ignores_other_groups_in_the_zone(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    respx_mock.get(LINKS).mock(return_value=page({**record(), "switchGroupId": "g2"}))
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        assert client.zone_switch_group_links.find(ZONE, GROUP) is None
+
+
+def test_list_rejects_more_than_one_filter(
+    respx_mock: respx.MockRouter, controller_url: str
+) -> None:
+    register_session(respx_mock)
+    route = respx_mock.get(LINKS)
+
+    with SmartZoneClient(controller_url, "admin", "pw") as client:
+        with pytest.raises(ValueError, match="at most one"):
+            client.zone_switch_group_links.list(zone_id=ZONE, switch_group_id=GROUP)
+
+    assert not route.called
 
 
 def test_find_returns_unlinked_record(
