@@ -5,8 +5,8 @@
 Python client library for the Ruckus SmartZone (vSZ) public REST API. Targets
 API version `v13_1`. The client surface covers zones, WLANs, WLAN groups and
 their members, access points, AP groups and their members, firewall and
-precedence profiles, WLAN DPSK keys, and ICX switches through the Switch
-Manager ("switchm") API.
+precedence profiles, WLAN DPSK keys, zone-to-switch-group links, and ICX
+switches through the Switch Manager ("switchm") API.
 
 Build tooling, the spec-driven pipeline, the test harness, the exception/logging
 foundation, and the HTTP client with its service-ticket session lifecycle and
@@ -15,7 +15,8 @@ AP-group, firewall-profile, precedence-profile, and DPSK resource wrappers are
 implemented (reached via `client.zones`, `client.wlans`, `client.wlan_groups`,
 `client.access_points`, `client.ap_groups`, `client.firewall_profiles`,
 `client.precedence_profiles`, `client.dpsk`). Switch Manager wrappers hang off
-`client.switchm` (ADR 0008).
+`client.switchm` (ADR 0008); the public-API link tying a switch group to a zone
+is `client.zone_switch_group_links` (ADR 0009).
 
 ## Spec-driven models
 
@@ -55,7 +56,7 @@ client. `spec/raw/` is empty until a spec is fetched from a controller.
 | `ruckus_smartzone/logging_config.py` | Log level control; header and URL-query masking |
 | `ruckus_smartzone/validation.py` | Client-side field validation (group name constraints) |
 | `ruckus_smartzone/mac.py` | MAC validation and colon-uppercase normalisation |
-| `ruckus_smartzone/resources/` | Dict-first zone/WLAN/WLAN-group/access-point/AP-group/firewall-profile/precedence-profile/DPSK resource wrappers |
+| `ruckus_smartzone/resources/` | Dict-first zone/WLAN/WLAN-group/access-point/AP-group/firewall-profile/precedence-profile/DPSK/zone-switch-group-link resource wrappers |
 | `ruckus_smartzone/switchm/` | Switch Manager sub-client (`client.switchm`): verbs, POST-query pager, resource wrappers, body builder, deployment tracker |
 | `ruckus_smartzone/generated/models/` | Generated schema indexes (committed artifacts) |
 
@@ -87,5 +88,5 @@ Repo root: `tools/`, `spec/`, `tests/`, `Makefile`, `pyproject.toml`.
 - **Decision records:** [adr/](adr/) — API version (0001), auth/transport (0002),
   zone/WLAN/group wrappers (0003), access points (0004), AP groups (0005),
   firewall/precedence profiles (0006), DPSK keys (0007),
-  Switch Manager spec and client surface (0008)
+  Switch Manager spec and client surface (0008), zone switch group links (0009)
 - **Memory:** [.agents/memory/python-ruckus-smartzone-repository-memory.md](../.agents/memory/python-ruckus-smartzone-repository-memory.md)

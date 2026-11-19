@@ -11,6 +11,9 @@ from ruckus_smartzone.resources.firewall_profiles import FirewallProfilesResourc
 from ruckus_smartzone.resources.precedence_profiles import PrecedenceProfilesResource
 from ruckus_smartzone.resources.wlan_groups import WLANGroupsResource
 from ruckus_smartzone.resources.wlans import WLANsResource
+from ruckus_smartzone.resources.zone_switch_group_links import (
+    ZoneSwitchGroupLinksResource,
+)
 from ruckus_smartzone.resources.zones import ZonesResource
 
 __all__ = [
@@ -22,6 +25,7 @@ __all__ = [
     "FirewallProfilesResource",
     "PrecedenceProfilesResource",
     "DPSKResource",
+    "ZoneSwitchGroupLinksResource",
     "DELETE_EXPIRED_INTERVALS",
     "MoveResult",
     "MoveBatchResult",

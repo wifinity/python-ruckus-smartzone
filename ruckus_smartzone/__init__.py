@@ -30,6 +30,7 @@ from ruckus_smartzone.resources import (
     WLANGroupsResource,
     WLANsResource,
     ZonesResource,
+    ZoneSwitchGroupLinksResource,
 )
 from ruckus_smartzone.switchm import AUTHENTICATION_TYPES, SwitchManager
 from ruckus_smartzone.ticket_cache import InMemoryTicketCache, TicketCache
@@ -44,6 +45,7 @@ __all__ = [
     "FirewallProfilesResource",
     "PrecedenceProfilesResource",
     "DPSKResource",
+    "ZoneSwitchGroupLinksResource",
     "MoveResult",
     "MoveBatchResult",
     "normalize_mac",

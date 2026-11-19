@@ -85,6 +85,14 @@ In place:
   failing line and switch message. `raise_for_response` maps an
   `error.msgKey` body to `SmartZoneBusinessRuleError`. See ADR 0008.
 
+- Zone switch group link wrapper (`resources/zone_switch_group_links.py`,
+  reached as `client.zone_switch_group_links`): `list` (filters `zone_id`,
+  `switch_group_id`, `domain_id`), `get`, `find(zone_id, switch_group_id)`
+  (record or `None`), `create(zone_id, switch_group_id, link=True)`,
+  `update(id, fields)` (read-merge-PUT over `zoneId`/`switchGroupId`/`link`)
+  and `delete`. The link is a public-API (`wsg`) record, not a switchm one.
+  See ADR 0009.
+
 Live verification of the AP-group layer is complete (physical test AP, `v13_1`
 controller): CRUD, the radio-override round-trip, and membership all confirmed;
 `add_member` auto-removes an AP from its previous group (one AP group per zone)
