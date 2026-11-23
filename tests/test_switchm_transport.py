@@ -109,6 +109,87 @@ def test_query_trusts_total_count_over_has_more(
     assert route.call_count == 1
 
 
+def test_query_keeps_paging_past_has_more_false_until_total_count(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    route = respx_mock.post(f"{SWITCHM}/vlans/query").mock(
+        side_effect=[
+            page([{"i": 1}, {"i": 2}], total=5, has_more=True),
+            page([{"i": 3}, {"i": 4}], total=5, has_more=False),
+            page([{"i": 5}], total=5, has_more=False),
+        ]
+    )
+
+    items = sz.switchm.query("vlans/query", page_size=2)
+
+    assert [i["i"] for i in items] == [1, 2, 3, 4, 5]
+    assert [sent_json(route, n)["page"] for n in range(3)] == [1, 2, 3]
+
+
+def test_query_stops_once_total_count_is_reached(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    route = respx_mock.post(f"{SWITCHM}/switch").mock(
+        side_effect=[
+            page([{"i": 1}, {"i": 2}], total=4, has_more=True),
+            page([{"i": 3}, {"i": 4}], total=4, has_more=True),
+        ]
+    )
+
+    items = sz.switchm.query("switch", page_size=2)
+
+    assert [i["i"] for i in items] == [1, 2, 3, 4]
+    assert route.call_count == 2
+
+
+def test_query_stops_on_empty_page_short_of_total_count(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    route = respx_mock.post(f"{SWITCHM}/switch").mock(
+        side_effect=[
+            page([{"i": 1}, {"i": 2}], total=5, has_more=True),
+            page([], total=5, has_more=False),
+        ]
+    )
+
+    items = sz.switchm.query("switch", page_size=2)
+
+    assert [i["i"] for i in items] == [1, 2]
+    assert route.call_count == 2
+
+
+def test_query_without_total_count_stops_on_has_more_false(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    route = respx_mock.post(f"{SWITCHM}/switch").mock(
+        side_effect=[
+            page([{"i": 1}, {"i": 2}], has_more=True),
+            page([{"i": 3}, {"i": 4}], has_more=False),
+        ]
+    )
+
+    items = sz.switchm.query("switch", page_size=2)
+
+    assert [i["i"] for i in items] == [1, 2, 3, 4]
+    assert route.call_count == 2
+
+
+def test_query_without_total_count_or_has_more_stops_on_short_page(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    route = respx_mock.post(f"{SWITCHM}/switch").mock(
+        side_effect=[
+            page([{"i": 1}, {"i": 2}]),
+            page([{"i": 3}]),
+        ]
+    )
+
+    items = sz.switchm.query("switch", page_size=2)
+
+    assert [i["i"] for i in items] == [1, 2, 3]
+    assert route.call_count == 2
+
+
 def test_query_clamps_page_size(
     respx_mock: respx.MockRouter, sz: SmartZoneClient
 ) -> None:

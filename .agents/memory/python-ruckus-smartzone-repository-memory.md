@@ -186,8 +186,9 @@ Version anchor: SmartZone software `7.1.1.0.551` (vSZ-H) + API `v13_1`
 - A switch's id is its MAC (colon-uppercase). `POST /switch` has no serial
   filter: `find_by_serial` uses `fullTextSearch` and keeps exact matches.
 - Lists are POST queries paged by one-based `page`/`limit`. `hasMore` is
-  unreliable (true on the last page of some lists), so the pager trusts
-  `totalCount`. Filter types differ: port settings and VLANs filter on
+  unreliable (true on the last page of some lists, false before the last
+  page of others), so the pager trusts `totalCount` and stops early only on an
+  empty page. Filter types differ: port settings and VLANs filter on
   `filters[].type = switchId` or `SWITCH_GROUP`; port details, backups and
   jobs take `extraFilters[].type = SWITCH`.
 - `GET /group/ids/byDomain/{domainId}` wraps its list in `{success, data}` and

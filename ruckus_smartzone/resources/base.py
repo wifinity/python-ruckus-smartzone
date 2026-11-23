@@ -73,10 +73,11 @@ def collect_pages(
     """Walk a one-based ``page``/``limit`` list endpoint and return every item.
 
     ``fetch_page(page, limit)`` returns one page in the ``{totalCount, hasMore,
-    list}`` shape. Paging stops on an empty page, on ``hasMore: false``, once
-    ``totalCount`` items have been fetched, or (with neither field) on a short
-    page. ``totalCount`` wins over ``hasMore`` because some endpoints report
-    ``hasMore: true`` on their last page.
+    list}`` shape. Paging always stops on an empty page. When a page carries
+    ``totalCount``, paging continues until that many items have been fetched,
+    whatever ``hasMore`` says: some endpoints report ``hasMore: true`` on their
+    last page, others ``hasMore: false`` before it. Without ``totalCount``,
+    paging stops on ``hasMore: false`` or, with neither field, on a short page.
     """
     results: List[Dict[str, Any]] = []
     page = 1
@@ -89,11 +90,12 @@ def collect_pages(
             break
         total = response.get("totalCount")
         has_more = response.get("hasMore")
-        if has_more is False:
+        if total is not None:
+            if len(results) >= total:
+                break
+        elif has_more is False:
             break
-        if total is not None and len(results) >= total:
-            break
-        if has_more is None and total is None and len(items) < limit:
+        elif has_more is None and len(items) < limit:
             break
         page += 1
 
