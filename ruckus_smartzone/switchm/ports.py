@@ -12,6 +12,7 @@ turns PoE off).
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from ruckus_smartzone.const import DEFAULT_PAGE_SIZE
+from ruckus_smartzone.exceptions import SmartZoneNotFoundError
 from ruckus_smartzone.mac import normalize_mac
 from ruckus_smartzone.switchm.base import (
     SwitchmResource,
@@ -20,6 +21,83 @@ from ruckus_smartzone.switchm.base import (
     single,
     switch_filter,
 )
+
+# Fields the bulk endpoint keeps unchanged when they are named in
+# ``ignoreList``; any other name there makes it fail with a bare 500.
+BULK_IGNORABLE = (
+    "portName",
+    "portProtected",
+    "taggedVlans",
+    "untaggedVlans",
+    "broadcastLimitKbps",
+    "multicastLimitKbps",
+    "unknownUnicastLimitKbps",
+    "poeEnabled",
+    "poeClass",
+    "poePriority",
+    "poeBudget",
+    "inAclConfigName",
+    "outAclConfigName",
+    "portSpeed",
+    "rstpAdminEdgePortEnabled",
+    "stpBpduGuardEnabled",
+    "stpRootGuardEnabled",
+    "portDhcpSnooping",
+    "pppoeIa",
+    "arpInspectionEnabled",
+    "v6NdInspectionEnabled",
+    "dhcpSnoopingTrustPortEnabled",
+    "ipsgEnabled",
+    "lldpEnabled",
+    "dscpTrustEnabled",
+    "voiceVlanId",
+    "flexibleAuthenticationEnabled",
+    "authenticationType",
+    "changeAuthOrder",
+    "dot1XPortControl",
+    "authDefaultVlan",
+    "authFailAction",
+    "restrictedVlan",
+    "authTimeoutAction",
+    "criticalVlan",
+)
+
+# Fields the bulk endpoint always sets from the body.
+_NOT_IGNORABLE = ("portEnabled", "isStormControlUnitKbps")
+
+# Fields ``bulk_update`` accepts in ``fields``.
+BULK_FIELDS = frozenset(BULK_IGNORABLE + _NOT_IGNORABLE)
+
+# Values filling the bulk body for the fields the web UI always sends. The
+# endpoint refuses a body without them, but an ignored field keeps its current
+# value, so these are never applied unless ``fields`` leaves a
+# non-ignorable field unset and the switch reports no value for it.
+BULK_PLACEHOLDERS: Dict[str, Any] = {
+    "portEnabled": True,
+    "portProtected": False,
+    "untaggedVlans": "1",
+    "isStormControlUnitKbps": True,
+    "poeEnabled": True,
+    "poeClass": "0",
+    "poePriority": 3,
+    "portSpeed": "AUTO",
+    "rstpAdminEdgePortEnabled": False,
+    "stpBpduGuardEnabled": False,
+    "stpRootGuardEnabled": False,
+    "arpInspectionEnabled": False,
+    "v6NdInspectionEnabled": False,
+    "dhcpSnoopingTrustPortEnabled": False,
+    "ipsgEnabled": False,
+    "lldpEnabled": True,
+    "dscpTrustEnabled": False,
+    "flexibleAuthenticationEnabled": False,
+    "authenticationType": "802.1x",
+    "changeAuthOrder": False,
+    "dot1XPortControl": "auto",
+    "authFailAction": "block",
+    "authTimeoutAction": "none",
+    "portName": "x",
+}
 
 # Firmware-gated object that a PUT refuses on firmware without PPPoE IA
 # support, even when it is sent back unchanged.
@@ -82,21 +160,77 @@ class PortSettingsResource(SwitchmResource):
         )
 
     def bulk_update(
-        self, port_settings_ids: Iterable[str], fields: Mapping[str, Any]
+        self,
+        switch_id: str,
+        group_id: str,
+        ports: Iterable[str],
+        fields: Mapping[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        """Apply the same ``portSettings_createBulk`` fields to several ports.
+        """Apply the same changes to several ports of one switch in one call.
 
-        The body is sent as given, with no merge, so pass every setting the
-        ports should keep: a port PUT resets the fields it does not carry.
+        ``POST /portSettings/bulk`` sets every field not named in its
+        ``ignoreList`` from the body, and refuses a body without a value for
+        each field the web UI sends, even ignored ones. The body is therefore
+        :data:`BULK_PLACEHOLDERS` overlaid with ``fields``, and ``ignoreList``
+        is every :data:`BULK_IGNORABLE` field not in ``fields``, so only
+        ``fields`` change. ``portEnabled`` and ``isStormControlUnitKbps``
+        cannot be ignored: unless ``fields`` sets them, they are read from the
+        switch's current port settings and must agree across ``ports``.
+
+        Each call is one ``PORT_CONFIGURATION`` deployment; back-to-back calls
+        succeed where a burst of per-port PUTs is refused with an ongoing local
+        configuration change.
+
+        Args:
+            switch_id: Switch MAC.
+            group_id: Switch group id.
+            ports: Port identifiers (``1/1/10``), not port settings ids.
+            fields: Only the settings that change, keyed by API name.
 
         Raises:
-            ValueError: On no ids, an unknown field or an unaccepted
-                ``authenticationType``.
+            ValueError: On no ports, an empty id, a field outside
+                :data:`BULK_FIELDS`, an unaccepted ``authenticationType``, or
+                ports that disagree on a non-ignorable field ``fields`` omits.
+            SmartZoneNotFoundError: If the switch has no such port.
         """
-        ids = list(port_settings_ids)
-        if not ids:
-            raise ValueError("at least one port settings id is required")
+        port_list = list(ports)
+        if not port_list:
+            raise ValueError("at least one port is required")
+        if not switch_id or not group_id:
+            raise ValueError("switch_id and group_id are required")
+        unknown = sorted(key for key in fields if key not in BULK_FIELDS)
+        if unknown:
+            raise ValueError(f"portSettings bulk update has no field(s) {unknown}")
         check_authentication_type(fields)
-        body = build_body("portSettings_createBulk", fields)
-        body["idList"] = ids
+        mac = normalize_mac(switch_id)
+
+        body: Dict[str, Any] = dict(BULK_PLACEHOLDERS)
+        missing = [key for key in _NOT_IGNORABLE if key not in fields]
+        if missing:
+            body.update(self._current_values(mac, port_list, missing))
+        body.update(build_body("portSettings_createBulk", fields))
+        body["idList"] = port_list
+        body["ignoreList"] = [key for key in BULK_IGNORABLE if key not in fields]
+        body["groupId"] = group_id
+        body["switchId"] = mac
         return self.switchm.post("portSettings/bulk", json=body)
+
+    def _current_values(
+        self, switch_id: str, ports: List[str], keys: List[str]
+    ) -> Dict[str, Any]:
+        """Return the shared current value of ``keys`` across ``ports``."""
+        by_port = {p.get("port"): p for p in self.list_switch(switch_id)}
+        current = []
+        for port in ports:
+            if port not in by_port:
+                raise SmartZoneNotFoundError(f"switch {switch_id} has no port {port!r}")
+            current.append(by_port[port])
+        values: Dict[str, Any] = {}
+        for key in keys:
+            seen = {settings.get(key) for settings in current} - {None}
+            if len(seen) > 1:
+                raise ValueError(
+                    f"ports disagree on {key}; set it in fields to apply one value"
+                )
+            values[key] = seen.pop() if seen else BULK_PLACEHOLDERS[key]
+        return values

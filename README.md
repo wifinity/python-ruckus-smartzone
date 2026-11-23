@@ -351,8 +351,13 @@ reads the object, keeps its writable fields, applies your changes and PUTs the
 full body, so you still pass only what changes. Two exceptions: the
 controller never returns an AAA server's `secret`, so `aaa_servers.update()`
 requires it, and a provision template's GET has no `models`, so a provision
-`cli_templates.replace()` requires them. `port_settings.bulk_update()` sends
-its body as given: pass every setting the ports should keep.
+`cli_templates.replace()` requires them. `port_settings.bulk_update(switch_id,
+group_id, ports, fields)` takes `1/1/10`-style port identifiers and only the
+changed fields; every other field is kept through the endpoint's `ignoreList`.
+`portEnabled` and `isStormControlUnitKbps` are always applied, so unless you set
+them they are read from the ports, which must agree. Prefer it to a burst of
+`update()` calls: per-port PUTs in quick succession are refused with an ongoing
+local configuration change.
 
 **CLI config mode.** Once any CLI template has been created in a switch group,
 the group stays in CLI config mode and the controller refuses VLAN and AAA

@@ -261,3 +261,29 @@ there.
   authentication still work there.
 - `POST /vlans` requires `pushTimeType`; `vlans.create()` defaults it to
   `NOW`.
+
+### Port settings bulk update
+
+`POST /portSettings/bulk` is a merge driven by `ignoreList`, not a full
+replace. Shape confirmed against a lab controller by replaying a web UI request:
+
+- `idList` holds port identifiers (`1/1/10`), not port settings ids; `switchId`
+  (MAC) and `groupId` are required ("must not be null" otherwise).
+- A field named in `ignoreList` keeps its current value; any other field is set
+  from the body. `ignoreList` accepts only the web UI's vocabulary
+  (`BULK_IGNORABLE`); other names (`*Pkts`, `altoId`) give a bare 500.
+- The body must carry a value for every field the UI sends, ignored or not; a
+  body with only the changed fields gives a bare 500. `portEnabled` and
+  `isStormControlUnitKbps` are not ignorable, so they are always applied.
+- `pppoeIa` in the body is refused on firmware before 10.0.20b_cd2;
+  `voiceVlanId` must be at least 1.
+- Each call is one `PORT_CONFIGURATION` deployment. 24 single-port calls sent
+  back to back all succeeded in 63 s, where a burst of `PUT /portSettings/{id}`
+  is refused with an ongoing local configuration change.
+
+`bulk_update(switch_id, group_id, ports, fields)` fills the body from the
+constant `BULK_PLACEHOLDERS` rather than a read, since ignored fields keep
+their value whatever the body says. It overlays `fields` and lists every
+`BULK_IGNORABLE` field not in `fields` in `ignoreList`. For the two
+non-ignorable fields it reads the switch's port settings unless `fields` sets
+them, and refuses ports that disagree on them.

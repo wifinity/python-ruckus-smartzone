@@ -6,6 +6,7 @@ import respx
 
 from ruckus_smartzone import SmartZoneClient
 from ruckus_smartzone.exceptions import SmartZoneNotFoundError
+from ruckus_smartzone.switchm.ports import BULK_IGNORABLE, BULK_PLACEHOLDERS
 from tests.switchm_support import MAC, SWITCHM, page, sent_json
 
 QUERY = f"{SWITCHM}/portSettings/query"
@@ -128,20 +129,100 @@ def test_update_refuses_get_body(
     assert not put.called
 
 
-def test_bulk_update_sends_id_list(
-    respx_mock: respx.MockRouter, sz: SmartZoneClient
-) -> None:
-    route = respx_mock.post(f"{SWITCHM}/portSettings/bulk").mock(
-        return_value=httpx.Response(204)
+GROUP = "g1"
+BULK = f"{SWITCHM}/portSettings/bulk"
+
+
+def _ports(*settings: dict) -> httpx.Response:
+    return page(list(settings), total=len(settings))
+
+
+def test_bulk_update_body(respx_mock: respx.MockRouter, sz: SmartZoneClient) -> None:
+    query = respx_mock.post(QUERY).mock(
+        return_value=_ports(
+            {"port": "1/1/1", "portEnabled": False, "isStormControlUnitKbps": True},
+            {"port": "1/1/2", "portEnabled": False, "isStormControlUnitKbps": True},
+        )
+    )
+    route = respx_mock.post(BULK).mock(return_value=httpx.Response(204))
+
+    sz.switchm.port_settings.bulk_update(
+        "020000aabb01", GROUP, ["1/1/1", "1/1/2"], {"untaggedVlans": "20"}
     )
 
-    sz.switchm.port_settings.bulk_update(["p1", "p2"], {"poeEnabled": False})
+    body = sent_json(route)
+    assert query.called
+    assert body["idList"] == ["1/1/1", "1/1/2"]
+    assert body["switchId"] == MAC and body["groupId"] == GROUP
+    assert body["untaggedVlans"] == "20"
+    assert body["portEnabled"] is False
+    assert set(body["ignoreList"]) == set(BULK_IGNORABLE) - {"untaggedVlans"}
+    assert set(BULK_PLACEHOLDERS) <= set(body)
+    assert "pppoeIa" not in body
 
-    assert sent_json(route) == {"poeEnabled": False, "idList": ["p1", "p2"]}
+
+def test_bulk_update_port_name_and_enabled_skip_read(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    query = respx_mock.post(QUERY)
+    route = respx_mock.post(BULK).mock(return_value=httpx.Response(204))
+
+    sz.switchm.port_settings.bulk_update(
+        MAC,
+        GROUP,
+        ["1/1/5"],
+        {"portName": "ap-5", "portEnabled": True, "isStormControlUnitKbps": True},
+    )
+
+    body = sent_json(route)
+    assert not query.called
+    assert body["portName"] == "ap-5" and body["portEnabled"] is True
+    assert "portName" not in body["ignoreList"]
+    assert len(body["ignoreList"]) == len(BULK_IGNORABLE) - 1
 
 
-def test_bulk_update_refusals(sz: SmartZoneClient) -> None:
+def test_bulk_update_ports_disagree(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    respx_mock.post(QUERY).mock(
+        return_value=_ports(
+            {"port": "1/1/1", "portEnabled": True},
+            {"port": "1/1/2", "portEnabled": False},
+        )
+    )
+    route = respx_mock.post(BULK)
+
     with pytest.raises(ValueError):
-        sz.switchm.port_settings.bulk_update([], {"poeEnabled": False})
+        sz.switchm.port_settings.bulk_update(
+            MAC, GROUP, ["1/1/1", "1/1/2"], {"poeEnabled": False}
+        )
+    with pytest.raises(SmartZoneNotFoundError):
+        sz.switchm.port_settings.bulk_update(
+            MAC, GROUP, ["1/1/48"], {"poeEnabled": False}
+        )
+    assert not route.called
+
+
+@pytest.mark.parametrize(
+    ("switch_id", "group_id", "ports", "fields"),
+    [
+        (MAC, GROUP, [], {"poeEnabled": False}),
+        ("", GROUP, ["1/1/1"], {"poeEnabled": False}),
+        (MAC, "", ["1/1/1"], {"poeEnabled": False}),
+        (MAC, GROUP, ["1/1/1"], {"altoId": "x"}),
+        (MAC, GROUP, ["1/1/1"], {"broadcastLimitPkts": 10}),
+        (MAC, GROUP, ["1/1/1"], {"authenticationType": "x"}),
+    ],
+)
+def test_bulk_update_refusals(
+    respx_mock: respx.MockRouter,
+    sz: SmartZoneClient,
+    switch_id: str,
+    group_id: str,
+    ports: list,
+    fields: dict,
+) -> None:
+    route = respx_mock.post(BULK)
     with pytest.raises(ValueError):
-        sz.switchm.port_settings.bulk_update(["p1"], {"authenticationType": "x"})
+        sz.switchm.port_settings.bulk_update(switch_id, group_id, ports, fields)
+    assert not route.called
