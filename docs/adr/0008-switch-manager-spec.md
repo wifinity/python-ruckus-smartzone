@@ -287,3 +287,8 @@ their value whatever the body says. It overlays `fields` and lists every
 `BULK_IGNORABLE` field not in `fields` in `ignoreList`. For the two
 non-ignorable fields it reads the switch's port settings unless `fields` sets
 them, and refuses ports that disagree on them.
+
+Live-checked on a lab ICX8200-48P: single-port and six-port calls changing
+`portName`, `portEnabled` or `lldpEnabled` each deployed once and changed only
+that field on the listed ports. The port settings read for the non-ignorable
+fields took 0.2–0.5 s against a deployment of 30–45 s.
