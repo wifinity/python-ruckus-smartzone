@@ -218,6 +218,11 @@ Two findings from this run changed the implementation:
   whole history rather than its tail.
 - Backup content is plain text served with a JSON content type, so it is
   read as text.
+- `POST /switchconfig/backup` queues a backup that the controller starts only
+  on a five-minute boundary. `POST /switchconfig/backup/manual` with one
+  `{switchId, switchName}` starts it at once and returns its
+  `configBackupId`: on the lab switch it reached `SUCCESS` 10 s after the
+  request (2026-11-25). The SDK wraps it as `backup_now`.
 
 Write paths, the same day, on the test switch only:
 

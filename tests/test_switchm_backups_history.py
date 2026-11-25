@@ -5,7 +5,7 @@ import pytest
 import respx
 
 from ruckus_smartzone import SmartZoneClient
-from ruckus_smartzone.exceptions import SmartZoneNotFoundError
+from ruckus_smartzone.exceptions import SmartZoneAPIError, SmartZoneNotFoundError
 from tests.switchm_support import MAC, SWITCHM, page, sent_json
 
 
@@ -37,6 +37,41 @@ def test_backup_sends_switch_list_and_master_flag(
     assert route.calls[1].request.url.params["master"] == "true"
     with pytest.raises(ValueError):
         sz.switchm.config_backups.backup([])
+
+
+def test_backup_now_sends_one_switch_and_returns_the_backup_id(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient
+) -> None:
+    route = respx_mock.post(f"{SWITCHM}/switchconfig/backup/manual").mock(
+        return_value=httpx.Response(
+            200, json={"configBackupId": "b9", "switchId": MAC, "errorMessage": ""}
+        )
+    )
+
+    assert sz.switchm.config_backups.backup_now("020000aabb01", "SW-1") == "b9"
+    assert sz.switchm.config_backups.backup_now(MAC) == "b9"
+
+    assert sent_json(route, 0) == {"switchId": MAC, "switchName": "SW-1"}
+    assert sent_json(route, 1) == {"switchId": MAC}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"configBackupId": "b9", "switchId": MAC, "errorMessage": "switch offline"},
+        {"configBackupId": "", "switchId": MAC, "errorMessage": ""},
+        {},
+    ],
+)
+def test_backup_now_refused_or_without_an_id_raises(
+    respx_mock: respx.MockRouter, sz: SmartZoneClient, payload: dict
+) -> None:
+    respx_mock.post(f"{SWITCHM}/switchconfig/backup/manual").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+
+    with pytest.raises(SmartZoneAPIError, match="manual config backup"):
+        sz.switchm.config_backups.backup_now(MAC)
 
 
 def test_backup_content_delete_and_alerts(

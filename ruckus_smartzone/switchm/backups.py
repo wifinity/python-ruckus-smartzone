@@ -3,6 +3,7 @@
 from typing import Any, Dict, Iterable, List, Optional
 
 from ruckus_smartzone.const import DEFAULT_PAGE_SIZE
+from ruckus_smartzone.exceptions import SmartZoneAPIError
 from ruckus_smartzone.mac import normalize_mac
 from ruckus_smartzone.switchm.base import SwitchmResource, switch_extra_filter
 
@@ -26,16 +27,41 @@ class ConfigBackupsResource(SwitchmResource):
     def backup(
         self, switch_ids: Iterable[str], *, master: Optional[bool] = None
     ) -> Optional[Dict[str, Any]]:
-        """Start a config backup of each switch; ``master`` flags it as master.
+        """Queue a config backup of each switch; ``master`` flags it as master.
 
-        The backup runs asynchronously; a manual backup takes a couple of
-        minutes to reach ``SUCCESS`` in :meth:`list_switch`.
+        The controller starts queued backups only on five-minute boundaries, so
+        one can take up to five minutes to reach ``SUCCESS`` in
+        :meth:`list_switch`. :meth:`backup_now` starts one at once.
         """
         ids = [normalize_mac(mac) for mac in switch_ids]
         if not ids:
             raise ValueError("at least one switch id is required")
         params = None if master is None else {"master": str(master).lower()}
         return self.switchm.post("switchconfig/backup", params=params, json=ids)
+
+    def backup_now(self, switch_id: str, switch_name: Optional[str] = None) -> str:
+        """Start a config backup of one switch at once and return its backup id.
+
+        Unlike :meth:`backup` it does not wait for the next five-minute
+        boundary: the backup usually reaches ``SUCCESS`` in
+        :meth:`list_switch` within about ten seconds.
+
+        Raises:
+            SmartZoneAPIError: The controller refused the backup or returned no
+                backup id.
+        """
+        body: Dict[str, Any] = {"switchId": normalize_mac(switch_id)}
+        if switch_name is not None:
+            body["switchName"] = switch_name
+        result = self.switchm.post("switchconfig/backup/manual", json=body) or {}
+        error = result.get("errorMessage")
+        backup_id = result.get("configBackupId")
+        if error or not isinstance(backup_id, str) or not backup_id:
+            raise SmartZoneAPIError(
+                f"manual config backup of {body['switchId']} failed: {error or 'no backup id returned'}",
+                response_data=result,
+            )
+        return backup_id
 
     def content(self, config_id: str) -> str:
         """Return a backup's content: the switch's running config as text."""
